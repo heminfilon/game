@@ -1,0 +1,18 @@
+{
+  "name": "Pottery Master",
+  "short_name": "Pottery",
+  "description": "Interactive 3D Pottery Game - Let's Create Pottery",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#121316",
+  "theme_color": "#121316",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "appId": "com.antigravity.pottery",
+  "appName": "Pottery Master",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

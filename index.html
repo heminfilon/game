@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#121316" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <title>Pottery Master - Let's Create Pottery</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Kiln Heat Effect Overlay -->
+    <div id="kiln-fx" class="kiln-overlay"></div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast">Notice message</div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+      <!-- Top Navigation & Status -->
+      <div class="top-bar">
+        <div class="coin-badge" id="coin-badge" title="In-game Coins">
+          <span class="coin-icon">🪙</span>
+          <span id="coin-count">100</span>
+        </div>
+        <div class="stage-title" id="stage-title">Let's Create Pottery</div>
+        <div class="top-actions">
+          <button class="icon-btn" id="btn-sound" title="Toggle Sound">🔊</button>
+          <button class="icon-btn" id="btn-home" title="Home Studio">🏠</button>
+        </div>
+      </div>
+
+      <!-- Live Height Gauge HUD (Active during shaping & appraisal) -->
+      <div class="height-meter-badge" id="height-hud">
+        <span class="label">Pot Height</span>
+        <span class="val" id="height-val">22.0 cm</span>
+      </div>
+
+      <!-- STAGE 1: SHAPING CONTROLS -->
+      <div class="bottom-panel" id="panel-shaping" style="display: none;">
+        <div class="card">
+          <p class="instruction-hint">
+            🖐️ Drag horizontally to <b>pull / minimize</b> clay. Drag near rim to <b>stretch height</b>.
+          </p>
+          <div class="shaping-controls" style="margin-top: 10px;">
+            <button class="btn btn-secondary" id="btn-smooth-clay" style="flex: 1; padding: 10px;">✨ Smooth</button>
+            <button class="btn btn-secondary" id="btn-reset-clay" style="flex: 1; padding: 10px;">↺ Reset</button>
+          </div>
+          <button class="btn btn-primary" id="btn-finish-shape" style="margin-top: 10px; width: 100%;">
+            🎨 Next: Decorate & Paint
+          </button>
+        </div>
+      </div>
+
+      <!-- STAGE 2: PAINTING & DECORATING CONTROLS -->
+      <div class="bottom-panel" id="panel-decorating" style="display: none;">
+        <div class="card">
+          <!-- Colors -->
+          <div class="palette-row" id="palette-row">
+            <!-- Populated via JS -->
+          </div>
+          <!-- Patterns & Tools -->
+          <div class="pattern-tools-row" id="pattern-tools-row" style="margin-top: 8px;">
+            <div class="tool-chip active" data-tool="brush">🖌️ Freehand</div>
+            <div class="tool-chip" data-tool="band">🎗️ Glaze Band</div>
+            <div class="tool-chip" data-tool="pattern_greek">🏛️ Greek Key</div>
+            <div class="tool-chip" data-tool="pattern_tribal">🔶 Tribal</div>
+            <div class="tool-chip" data-tool="pattern_floral">🌸 Floral Vine</div>
+            <div class="tool-chip" data-tool="pattern_gold">👑 Royal Gold</div>
+          </div>
+          <!-- Size & Actions -->
+          <div class="slider-row" style="margin-top: 10px;">
+            <span>Brush Size</span>
+            <input type="range" id="brush-size-slider" min="8" max="42" value="18" />
+            <button class="btn btn-secondary" id="btn-undo-paint" style="padding: 6px 14px; font-size: 13px;">↩ Undo</button>
+          </div>
+          <button class="btn btn-primary" id="btn-finish-decorating" style="margin-top: 12px; width: 100%;">
+            🔥 Next: Fire in Kiln
+          </button>
+        </div>
+      </div>
+
+      <!-- STAGE 3: KILN / HEATING CONTROLS -->
+      <div class="bottom-panel" id="panel-kiln" style="display: none;">
+        <div class="card">
+          <div class="temp-gauge-container">
+            <span style="font-size: 13px; color: var(--text-sub);">KILN TEMPERATURE</span>
+            <div class="temp-text" id="kiln-temp-text">25 °C</div>
+            <div class="temp-gauge-bar">
+              <div class="temp-gauge-fill" id="kiln-temp-fill"></div>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-start-firing" style="margin-top: 14px; width: 100%;">
+            🔥 Ignite Kiln & Bake Pottery
+          </button>
+          <button class="btn btn-gold" id="btn-inspect-pot" style="margin-top: 14px; width: 100%; display: none;">
+            ✨ Inspect Finished Pottery
+          </button>
+        </div>
+      </div>
+
+      <!-- STAGE 4: DECISION (KEEP OR SELL) -->
+      <div class="bottom-panel" id="panel-decision" style="display: none;">
+        <div class="card">
+          <div style="text-align: center;">
+            <h3 id="appraisal-style-name" style="font-size: 19px; color: #fff;">Imperial Ceramic Vase</h3>
+            <span style="font-size: 13px; color: var(--text-sub);">Firing Complete • High Gloss Porcelain</span>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="k">Measured Height</span>
+              <span class="v" id="appraisal-height">32.4 cm</span>
+            </div>
+            <div class="stat-item">
+              <span class="k">Decoration Bonus</span>
+              <span class="v" id="appraisal-decor">+65 Coins</span>
+            </div>
+          </div>
+
+          <div class="predicted-price-box">
+            <div>
+              <span style="font-size: 11px; text-transform: uppercase; color: var(--text-sub); display: block;">Predicted Valuation</span>
+              <span style="font-size: 20px; font-weight: 800; color: var(--gold);" id="predicted-price-text">145 Coins</span>
+            </div>
+            <span style="font-size: 26px;">🏺</span>
+          </div>
+
+          <div class="decision-actions">
+            <!-- Keep charges 10 in-game coins as requested -->
+            <button class="btn btn-secondary" id="btn-keep-pot" title="Store in inventory for 10 coins">
+              📦 Keep (10 🪙)
+            </button>
+            <button class="btn btn-gold" id="btn-sell-auction" title="Sell with interactive bargaining">
+              💰 Sell Pottery
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STAGE 5: INTERACTIVE BARGAIN & SELL MODAL -->
+      <div class="bargain-modal interactive" id="panel-bargain" style="display: none;">
+        <div class="card">
+          <div class="dealer-header">
+            <div class="dealer-avatar" id="dealer-avatar">🧐</div>
+            <div>
+              <h4 id="dealer-name" style="color: #fff; font-size: 16px;">Collector Hans</h4>
+              <span style="font-size: 12px; color: var(--text-sub);">Art Dealer & Connoisseur</span>
+            </div>
+          </div>
+
+          <div class="speech-bubble" id="dealer-dialogue">
+            "Fascinating height on this piece! I am prepared to offer you 95 coins."
+          </div>
+
+          <div class="patience-container">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-sub);">
+              <span>Buyer Patience</span>
+              <span id="patience-text">100%</span>
+            </div>
+            <div class="patience-bar">
+              <div class="patience-fill" id="patience-fill"></div>
+            </div>
+          </div>
+
+          <div class="bargain-button-group">
+            <div class="haggle-split">
+              <button class="btn btn-secondary" id="btn-haggle-counter">
+                📈 Haggle (+15%)
+              </button>
+              <button class="btn btn-secondary" id="btn-sweet-talk">
+                🤝 Pitch Craft
+              </button>
+            </div>
+            <button class="btn btn-success" id="btn-accept-deal" style="padding: 14px;">
+              ✅ Accept Deal (<span id="deal-offer-amount">95</span> 🪙)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOME / WELCOME SCREEN -->
+    <div class="home-screen" id="home-screen">
+      <div class="game-logo">
+        <h1>POTTERY MASTER</h1>
+        <p>Let's Create Pottery • Zen Ceramic Craft</p>
+      </div>
+
+      <div class="home-menu-cards">
+        <button class="btn btn-primary" id="btn-start-new-pot" style="padding: 18px; font-size: 18px;">
+          🏺 Create New Pottery
+        </button>
+        <button class="btn btn-secondary" id="btn-open-gallery" style="padding: 16px;">
+          📦 My Pottery Gallery (<span id="gallery-count-badge">0</span>)
+        </button>
+      </div>
+
+      <div style="text-align: center; font-size: 12px; color: var(--text-sub); padding-bottom: 8px;">
+        Interactive 3D Touch Shaping • Glazing • Kiln Firing • Art Bargaining
+      </div>
+    </div>
+
+    <!-- GALLERY / INVENTORY MODAL -->
+    <div class="gallery-modal" id="gallery-modal" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h2 style="font-size: 22px;">🏺 My Pottery Collection</h2>
+        <button class="icon-btn" id="btn-close-gallery">✕</button>
+      </div>
+      <div class="gallery-grid" id="gallery-grid">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg fail', err));
+      });
+    }
+  </script>
+</body>
+</html>
