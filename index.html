@@ -43,7 +43,7 @@
 
         <div class="top-actions">
           <button class="icon-btn" id="btn-sound" title="Toggle Sound">🔊</button>
-          <button class="icon-btn" id="btn-home" title="Home Studio">🏠</button>
+          <button class="icon-btn" id="btn-home" title="Home Studio (Auto-Saves Draft)">🏠</button>
         </div>
       </div>
 
@@ -55,7 +55,7 @@
 
       <!-- ============================================== -->
       <!-- STAGE 1: SHAPING - SIDE RIGHT FLOATING COLUMN -->
-      <!-- Zero bottom buttons! Placed cleanly on the right -->
+      <!-- Replaced Reset with Break Pot (-10 penalty)    -->
       <!-- ============================================== -->
       <div class="side-action-column right" id="panel-shaping" style="display: none;">
         <button class="side-circle-btn primary" id="btn-mini-finish" title="Done: Next to Paint">
@@ -66,26 +66,20 @@
           <span class="btn-icon">✨</span>
           <span class="btn-label">Smooth</span>
         </button>
-        <button class="side-circle-btn" id="btn-mini-reset" title="Reset Shape">
-          <span class="btn-icon">↺</span>
-          <span class="btn-label">Reset</span>
+        <button class="side-circle-btn danger" id="btn-mini-break" title="Break Pot (-10 🪙)">
+          <span class="btn-icon">💥</span>
+          <span class="btn-label">Break</span>
         </button>
       </div>
 
       <!-- ============================================== -->
       <!-- STAGE 2: PAINTING & DECORATING - SIDE TRAYS -->
-      <!-- Left side: Colors | Right side: Tools & Fire -->
-      <!-- Zero bottom buttons! -->
       <!-- ============================================== -->
-      <!-- Left Tray: Colors Palette -->
       <div class="side-action-column left" id="side-tray-left" style="display: none;">
         <div class="side-toggle-pill" id="btn-toggle-colors" title="Toggle Colors">◀</div>
-        <div class="palette-column" id="palette-column">
-          <!-- Populated by JS -->
-        </div>
+        <div class="palette-column" id="palette-column"></div>
       </div>
 
-      <!-- Right Tray: Pattern Tools + Size Slider + Done Fire Button -->
       <div class="side-action-column right" id="side-tray-right" style="display: none;">
         <button class="side-circle-btn primary" id="btn-paint-finish" title="Done: Fire in Kiln">
           <span class="btn-icon">🔥</span>
@@ -95,10 +89,12 @@
           <span class="btn-icon">↩</span>
           <span class="btn-label">Undo</span>
         </button>
+        <button class="side-circle-btn danger" id="btn-paint-break" title="Break Pot (-10 🪙)">
+          <span class="btn-icon">💥</span>
+          <span class="btn-label">Break</span>
+        </button>
         <div class="side-toggle-pill" id="btn-toggle-tools" title="Toggle Tools">▶</div>
-        <div class="pattern-column" id="pattern-column">
-          <!-- Populated by JS -->
-        </div>
+        <div class="pattern-column" id="pattern-column"></div>
       </div>
 
       <!-- ============================================== -->
@@ -165,7 +161,7 @@
       </div>
 
       <!-- ============================================== -->
-      <!-- STAGE 5: BARGAIN & BIDDING (At Bottom as approved) -->
+      <!-- STAGE 5: BARGAIN & BIDDING (Bottom card)        -->
       <!-- ============================================== -->
       <div class="bargain-modal interactive" id="panel-bargain" style="display: none;">
         <div class="collapsible-card" style="width: 100%;">
@@ -224,6 +220,10 @@
       </div>
 
       <div class="home-menu-cards">
+        <!-- Resume in-progress button (if draft exists) -->
+        <button class="btn btn-gold" id="btn-resume-pot" style="padding: 16px; font-size: 16px; display: none;">
+          ▶ Resume Current Pottery
+        </button>
         <button class="btn btn-primary" id="btn-start-new-pot" style="padding: 16px; font-size: 17px;">
           🏺 Create New Pottery
         </button>
@@ -233,11 +233,27 @@
       </div>
 
       <div style="text-align: center; font-size: 11px; color: var(--text-sub); padding-bottom: 8px;">
-        Touch Sculpting • Custom Glazes • Kiln Firing • Art Collector Auctions
+        Auto-Save Active • Touch Sculpting • Custom Glazes • Kiln Firing
       </div>
     </div>
 
-    <!-- PROFILE MODAL -->
+    <!-- BREAK POT CONFIRMATION MODAL -->
+    <div class="modal-backdrop" id="break-confirm-modal" style="display: none;">
+      <div class="profile-card" style="max-width: 320px; text-align: center;">
+        <span style="font-size: 38px;">💥</span>
+        <h3 style="font-size: 18px; color: #fff; margin-top: 4px;">Break Pottery?</h3>
+        <p style="font-size: 13px; color: var(--text-sub); line-height: 1.4; margin-top: 6px;">
+          Are you sure you want to smash this pot? <br/>
+          <b style="color: var(--danger);">A 10 coin cleanup penalty will be deducted.</b>
+        </p>
+        <div style="display: flex; gap: 8px; margin-top: 14px;">
+          <button class="btn btn-secondary" id="btn-cancel-break" style="flex: 1;">Keep Working</button>
+          <button class="btn btn-danger" id="btn-confirm-break" style="flex: 1.3;">Break (-10 🪙)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILE MODAL WITH POTS DESTROYED METRIC -->
     <div class="modal-backdrop" id="profile-modal" style="display: none;">
       <div class="profile-card">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -268,9 +284,14 @@
             <span class="stat-lbl">In Inventory</span>
           </div>
           <div class="profile-stat-item">
+            <span class="stat-icon">💥</span>
+            <span class="stat-val" id="stat-pots-destroyed" style="color: var(--danger);">0</span>
+            <span class="stat-lbl">Pots Destroyed</span>
+          </div>
+          <div class="profile-stat-item" style="grid-column: 1 / -1;">
             <span class="stat-icon">🪙</span>
-            <span class="stat-val" id="stat-coins-earned">0</span>
-            <span class="stat-lbl">Coins Earned</span>
+            <span class="stat-val" id="stat-coins-earned" style="color: var(--gold);">0</span>
+            <span class="stat-lbl">Lifetime Coins Earned</span>
           </div>
         </div>
       </div>
@@ -299,19 +320,10 @@
         <h2 style="font-size: 20px;">🏺 My Pottery Collection</h2>
         <button class="icon-btn" id="btn-close-gallery">✕</button>
       </div>
-      <div class="gallery-grid" id="gallery-grid">
-        <!-- Rendered dynamically -->
-      </div>
+      <div class="gallery-grid" id="gallery-grid"></div>
     </div>
   </div>
 
   <script type="module" src="/src/game.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg fail', err));
-      });
-    }
-  </script>
 </body>
 </html>

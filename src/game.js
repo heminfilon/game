@@ -20,11 +20,16 @@ class PotteryGame {
     this.coins = parseInt(localStorage.getItem('pottery_coins') || '100', 10);
     this.gallery = JSON.parse(localStorage.getItem('pottery_gallery') || '[]');
     
+    // Player statistics (including Pots Destroyed: sum of self-broken + broken at bargain)
     this.stats = JSON.parse(localStorage.getItem('pottery_stats') || JSON.stringify({
       potsCreated: 0,
       potsSold: 0,
+      potsDestroyed: 0,
       coinsEarned: 0
     }));
+    if (this.stats.potsDestroyed === undefined) {
+      this.stats.potsDestroyed = 0;
+    }
 
     this.activeInventoryPotId = null;
     this.pendingUnlockItem = null;
@@ -32,7 +37,7 @@ class PotteryGame {
     this.container = document.getElementById('canvas-container');
     this.scene = new THREE.Scene();
     
-    // Camera framing: frames the pot and turntable cleanly with zero bottom overlap!
+    // Camera framing: frames the pot and turntable cleanly with zero bottom overlap
     this.camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
     this.camera.position.set(0, 1.5, 5.0);
     this.cameraTarget = new THREE.Vector3(0, 1.05, 0);
@@ -70,6 +75,7 @@ class PotteryGame {
     this.updateCoinDisplay();
     this.updateGalleryBadge();
     this.updateProfileModalUI();
+    this.checkResumeDraftButton();
 
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
@@ -165,6 +171,7 @@ class PotteryGame {
     document.getElementById('stat-pots-created').innerText = this.stats.potsCreated;
     document.getElementById('stat-pots-sold').innerText = this.stats.potsSold;
     document.getElementById('stat-in-inventory').innerText = this.gallery.length;
+    document.getElementById('stat-pots-destroyed').innerText = this.stats.potsDestroyed;
     document.getElementById('stat-coins-earned').innerText = this.stats.coinsEarned;
 
     let rank = "Apprentice Potter";
@@ -185,6 +192,122 @@ class PotteryGame {
     this.toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
   }
 
+  // --- AUTO-SAVE IN-PROGRESS DRAFT SYSTEM ---
+  saveCurrentDraft() {
+    if (this.state === STATE.HOME || this.state === STATE.GALLERY) return;
+
+    try {
+      const draft = {
+        state: this.state,
+        meshData: this.potteryModel.exportData(),
+        textureData: this.painter.toDataURL(),
+        isFired: (this.state === STATE.DECISION || this.state === STATE.BARGAIN),
+        activeInventoryPotId: this.activeInventoryPotId,
+        currentPotStats: this.currentPotStats || this.potteryModel.evaluatePotStats(),
+        savedAt: Date.now()
+      };
+      localStorage.setItem('pottery_current_draft', JSON.stringify(draft));
+      this.checkResumeDraftButton();
+    } catch (e) {
+      console.warn("Draft save error:", e);
+    }
+  }
+
+  clearDraft() {
+    localStorage.removeItem('pottery_current_draft');
+    this.checkResumeDraftButton();
+  }
+
+  checkResumeDraftButton() {
+    const btn = document.getElementById('btn-resume-pot');
+    if (!btn) return;
+    const raw = localStorage.getItem('pottery_current_draft');
+    if (raw) {
+      btn.style.display = 'flex';
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  resumeDraft() {
+    const raw = localStorage.getItem('pottery_current_draft');
+    if (!raw) return;
+
+    try {
+      const draft = JSON.parse(raw);
+      sound.playClick();
+
+      this.activeInventoryPotId = draft.activeInventoryPotId || null;
+      this.potteryModel.importData(draft.meshData);
+
+      if (draft.textureData) {
+        this.painter.loadFromDataURL(draft.textureData, () => {
+          this.potMesh.visible = true;
+        });
+      }
+
+      if (draft.isFired) {
+        this.clayMaterial.roughness = 0.15;
+        this.clayMaterial.metalness = 0.2;
+        this.clayMaterial.clearcoat = 1.0;
+      } else {
+        this.resetClayMaterialToRaw();
+      }
+
+      this.currentPotStats = draft.currentPotStats || this.potteryModel.evaluatePotStats();
+      this.setGameState(draft.state || STATE.SHAPING);
+      this.showToast("🏺 Resumed your in-progress pottery!");
+    } catch (e) {
+      console.error("Resume draft error:", e);
+      this.clearDraft();
+    }
+  }
+
+  // --- BREAK POT WITH 10 COIN PENALTY & CONFIRMATION ---
+  openBreakConfirmModal() {
+    sound.playClick();
+    document.getElementById('break-confirm-modal').style.display = 'flex';
+  }
+
+  closeBreakConfirmModal() {
+    sound.playClick();
+    document.getElementById('break-confirm-modal').style.display = 'none';
+  }
+
+  confirmBreakPot() {
+    this.closeBreakConfirmModal();
+
+    // Deduct 10 coins cleanup penalty as requested
+    const penalty = 10;
+    this.coins = Math.max(0, this.coins - penalty);
+    this.stats.potsDestroyed++; // Summed into profile destroyed metric!
+    this.updateCoinDisplay();
+    this.updateProfileModalUI();
+
+    sound.playShatterSound();
+
+    const shatter = document.getElementById('shatter-fx');
+    shatter.classList.add('show');
+    this.potMesh.visible = false;
+
+    // If broke an inventory pot, remove from inventory
+    if (this.activeInventoryPotId) {
+      this.gallery = this.gallery.filter(p => p.id !== this.activeInventoryPotId);
+      localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
+      this.updateGalleryBadge();
+      this.activeInventoryPotId = null;
+    }
+
+    this.clearDraft();
+    this.showToast("💥 Pot broken! Fined 10 coins cleanup penalty.");
+
+    setTimeout(() => {
+      shatter.classList.remove('show');
+      this.setGameState(STATE.HOME);
+    }, 1800);
+  }
+
+  // --- STORE CATALOG UI ---
   buildStoreCatalogUI() {
     const palCol = document.getElementById('palette-column');
     if (!palCol) return;
@@ -304,6 +427,11 @@ class PotteryGame {
 
   // --- STATE TRANSITIONS ---
   setGameState(newState) {
+    // If leaving to HOME, auto-save draft first!
+    if (newState === STATE.HOME && this.state !== STATE.HOME && this.state !== STATE.GALLERY) {
+      this.saveCurrentDraft();
+    }
+
     this.state = newState;
     sound.ensureContext();
 
@@ -317,7 +445,8 @@ class PotteryGame {
       'panel-bargain',
       'gallery-modal',
       'profile-modal',
-      'unlock-modal'
+      'unlock-modal',
+      'break-confirm-modal'
     ];
     elements.forEach(id => {
       const el = document.getElementById(id);
@@ -339,7 +468,7 @@ class PotteryGame {
         document.getElementById('home-screen').style.display = 'flex';
         this.wheelSpeed = 0.008;
         sound.setWheelSound(false);
-        this.activeInventoryPotId = null;
+        this.checkResumeDraftButton();
         break;
 
       case STATE.SHAPING:
@@ -348,8 +477,8 @@ class PotteryGame {
         document.getElementById('panel-shaping').style.display = 'flex';
         this.wheelSpeed = 0.024;
         sound.setWheelSound(true, 1.0);
-        this.resetClayMaterialToRaw();
         this.updateHeightHUD();
+        this.saveCurrentDraft();
         break;
 
       case STATE.DECORATING:
@@ -360,6 +489,7 @@ class PotteryGame {
         this.wheelSpeed = 0.004;
         sound.setWheelSound(false);
         this.buildStoreCatalogUI();
+        this.saveCurrentDraft();
         break;
 
       case STATE.KILN:
@@ -372,6 +502,7 @@ class PotteryGame {
         document.getElementById('kiln-temp-fill').style.width = "0%";
         this.wheelSpeed = 0.015;
         sound.setWheelSound(false);
+        this.saveCurrentDraft();
         break;
 
       case STATE.DECISION:
@@ -381,6 +512,7 @@ class PotteryGame {
         this.wheelSpeed = 0.012;
         sound.setWheelSound(false);
         this.setupDecisionCard();
+        this.saveCurrentDraft();
         break;
 
       case STATE.BARGAIN:
@@ -484,6 +616,7 @@ class PotteryGame {
         this.kilnLight.intensity = 0;
         inspectBtn.style.display = 'block';
         this.showToast("🔥 Pottery Fired to Perfection!");
+        this.saveCurrentDraft();
       }
     };
 
@@ -594,9 +727,12 @@ class PotteryGame {
     shatter.classList.add('show');
     this.potMesh.visible = false;
 
+    // Deduct 10 coins penalty and increment potsDestroyed stat!
     const penalty = 10;
     this.coins = Math.max(0, this.coins - penalty);
+    this.stats.potsDestroyed++;
     this.updateCoinDisplay();
+    this.updateProfileModalUI();
 
     if (this.activeInventoryPotId) {
       this.gallery = this.gallery.filter(p => p.id !== this.activeInventoryPotId);
@@ -605,6 +741,8 @@ class PotteryGame {
       this.activeInventoryPotId = null;
     }
 
+    this.clearDraft();
+
     document.getElementById('dealer-dialogue').innerText = 
       `"OUTRAGEOUS! The collector slammed the table in fury—your pottery shattered! (-10 🪙 Penalty)"`;
 
@@ -612,7 +750,7 @@ class PotteryGame {
     document.getElementById('btn-sweet-talk').disabled = true;
     document.getElementById('btn-accept-deal').disabled = true;
 
-    this.showToast("💥 Pot shattered! You were fined 10 coins.");
+    this.showToast("💥 Pot shattered! Fined 10 coins.");
 
     setTimeout(() => {
       shatter.classList.remove('show');
@@ -639,6 +777,7 @@ class PotteryGame {
       this.activeInventoryPotId = null;
     }
 
+    this.clearDraft();
     this.showToast(`🎉 Sold for ${earned} Coins!`);
     setTimeout(() => {
       this.setGameState(STATE.HOME);
@@ -676,6 +815,7 @@ class PotteryGame {
     localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
     this.updateGalleryBadge();
     this.updateProfileModalUI();
+    this.clearDraft();
 
     this.showToast("📦 Pot Saved to Gallery! (-10 🪙)");
     setTimeout(() => {
@@ -750,6 +890,7 @@ class PotteryGame {
       this.setGameState(STATE.HOME);
     };
 
+    // Profile Modal
     const openProfile = () => {
       sound.playClick();
       this.updateProfileModalUI();
@@ -762,6 +903,11 @@ class PotteryGame {
       document.getElementById('profile-modal').style.display = 'none';
     };
 
+    // Break Confirmation Modal
+    document.getElementById('btn-cancel-break').onclick = () => this.closeBreakConfirmModal();
+    document.getElementById('btn-confirm-break').onclick = () => this.confirmBreakPot();
+
+    // Store Unlock Modal
     document.getElementById('btn-cancel-unlock').onclick = () => {
       sound.playClick();
       document.getElementById('unlock-modal').style.display = 'none';
@@ -771,11 +917,17 @@ class PotteryGame {
       this.confirmUnlockItem();
     };
 
+    // Home Screen
+    document.getElementById('btn-resume-pot').onclick = () => {
+      this.resumeDraft();
+    };
+
     document.getElementById('btn-start-new-pot').onclick = () => {
       sound.playClick();
       this.stats.potsCreated++;
       this.updateProfileModalUI();
       this.activeInventoryPotId = null;
+      this.clearDraft();
       this.potteryModel.reset();
       this.painter.initBaseClay();
       this.setGameState(STATE.SHAPING);
@@ -799,12 +951,14 @@ class PotteryGame {
       sound.playClayTouch(0.6);
       this.potteryModel.smoothProfile();
       this.updateHeightHUD();
+      this.saveCurrentDraft();
     };
-    document.getElementById('btn-mini-reset').onclick = () => {
-      sound.playClick();
-      this.potteryModel.reset();
-      this.updateHeightHUD();
+
+    // Replaced Reset with Break Pot with 10 coin penalty as requested
+    document.getElementById('btn-mini-break').onclick = () => {
+      this.openBreakConfirmModal();
     };
+
     document.getElementById('btn-mini-finish').onclick = () => {
       sound.playClick();
       this.setGameState(STATE.DECORATING);
@@ -829,6 +983,11 @@ class PotteryGame {
     document.getElementById('btn-paint-undo').onclick = () => {
       sound.playClick();
       this.painter.undo();
+      this.saveCurrentDraft();
+    };
+
+    document.getElementById('btn-paint-break').onclick = () => {
+      this.openBreakConfirmModal();
     };
 
     document.getElementById('btn-paint-finish').onclick = () => {
@@ -883,6 +1042,10 @@ class PotteryGame {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    window.addEventListener('beforeunload', () => {
+      this.saveCurrentDraft();
+    });
+
     const dom = this.renderer.domElement;
     dom.addEventListener('pointerdown', (e) => this.onPointerDown(e), { passive: false });
     window.addEventListener('pointermove', (e) => this.onPointerMove(e), { passive: false });
@@ -935,6 +1098,9 @@ class PotteryGame {
     this.isInteracting = false;
     if (this.state === STATE.DECORATING) {
       this.painter.endStroke();
+      this.saveCurrentDraft();
+    } else if (this.state === STATE.SHAPING) {
+      this.saveCurrentDraft();
     }
   }
 
