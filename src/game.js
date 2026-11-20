@@ -33,6 +33,7 @@ class PotteryGame {
 
     this.activeInventoryPotId = null;
     this.pendingUnlockItem = null;
+    this.isCompletingPot = false;
 
     this.container = document.getElementById('canvas-container');
     this.scene = new THREE.Scene();
@@ -211,14 +212,19 @@ class PotteryGame {
 
   // --- AUTO-SAVE IN-PROGRESS DRAFT SYSTEM ---
   saveCurrentDraft() {
-    if (this.state === STATE.HOME || this.state === STATE.GALLERY) return;
+    // Only save drafts during active in-progress shaping, decorating, or kiln stages!
+    // Never save when completing, sold, kept, broken, or in gallery/home!
+    if (this.isCompletingPot) return;
+    if (this.state !== STATE.SHAPING && this.state !== STATE.DECORATING && this.state !== STATE.KILN) {
+      return;
+    }
 
     try {
       const draft = {
         state: this.state,
         meshData: this.potteryModel.exportData(),
         textureData: this.painter.toDataURL(),
-        isFired: (this.state === STATE.DECISION || this.state === STATE.BARGAIN),
+        isFired: false,
         activeInventoryPotId: this.activeInventoryPotId,
         currentPotStats: this.currentPotStats || this.potteryModel.evaluatePotStats(),
         savedAt: Date.now()
@@ -243,7 +249,6 @@ class PotteryGame {
     if (!resumeBtn || !newBtn) return;
     const raw = localStorage.getItem('pottery_current_draft');
     if (raw) {
-      // If previous pending pottery exists, ONLY show "Continue Pending Pottery"!
       resumeBtn.style.display = 'flex';
       resumeBtn.innerText = "🏺 Continue Pending Pottery";
       newBtn.style.display = 'none';
@@ -301,10 +306,10 @@ class PotteryGame {
   confirmBreakPot() {
     this.closeBreakConfirmModal();
 
-    // Deduct 10 coins cleanup penalty as requested
+    this.isCompletingPot = true;
     const penalty = 10;
     this.coins = Math.max(0, this.coins - penalty);
-    this.stats.potsDestroyed++; // Summed into profile destroyed metric!
+    this.stats.potsDestroyed++;
     this.updateCoinDisplay();
     this.updateProfileModalUI();
 
@@ -314,7 +319,6 @@ class PotteryGame {
     shatter.classList.add('show');
     this.potMesh.visible = false;
 
-    // If broke an inventory pot, remove from inventory
     if (this.activeInventoryPotId) {
       this.gallery = this.gallery.filter(p => p.id !== this.activeInventoryPotId);
       localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
@@ -323,6 +327,10 @@ class PotteryGame {
     }
 
     this.clearDraft();
+    this.potteryModel.reset();
+    this.painter.initBaseClay();
+    this.resetClayMaterialToRaw();
+
     this.showToast("💥 Pot broken! Fined 10 coins cleanup penalty.");
 
     setTimeout(() => {
@@ -452,9 +460,12 @@ class PotteryGame {
 
   // --- STATE TRANSITIONS ---
   setGameState(newState) {
-    // If leaving to HOME, auto-save draft first!
-    if (newState === STATE.HOME && this.state !== STATE.HOME && this.state !== STATE.GALLERY) {
-      this.saveCurrentDraft();
+    // If leaving to HOME during active shaping/decorating/kiln, auto-save draft!
+    if (newState === STATE.HOME) {
+      if (!this.isCompletingPot && (this.state === STATE.SHAPING || this.state === STATE.DECORATING || this.state === STATE.KILN)) {
+        this.saveCurrentDraft();
+      }
+      this.isCompletingPot = false;
     }
 
     this.state = newState;
@@ -746,13 +757,13 @@ class PotteryGame {
   }
 
   handleBargainCrashPenalty() {
+    this.isCompletingPot = true;
     sound.playShatterSound();
 
     const shatter = document.getElementById('shatter-fx');
     shatter.classList.add('show');
     this.potMesh.visible = false;
 
-    // Deduct 10 coins penalty and increment potsDestroyed stat!
     const penalty = 10;
     this.coins = Math.max(0, this.coins - penalty);
     this.stats.potsDestroyed++;
@@ -767,6 +778,10 @@ class PotteryGame {
     }
 
     this.clearDraft();
+    this.potteryModel.reset();
+    this.painter.initBaseClay();
+    this.resetClayMaterialToRaw();
+    this.bargainData = null;
 
     document.getElementById('dealer-dialogue').innerText = 
       `"OUTRAGEOUS! The collector slammed the table in fury—your pottery shattered! (-10 🪙 Penalty)"`;
@@ -785,6 +800,8 @@ class PotteryGame {
 
   handleAcceptDeal() {
     if (!this.bargainData) return;
+    this.isCompletingPot = true;
+
     const earned = this.bargainData.currentOffer;
     this.coins += earned;
     this.stats.potsSold++;
@@ -803,6 +820,11 @@ class PotteryGame {
     }
 
     this.clearDraft();
+    this.potteryModel.reset();
+    this.painter.initBaseClay();
+    this.resetClayMaterialToRaw();
+    this.bargainData = null;
+
     this.showToast(`🎉 Sold for ${earned} Coins!`);
     setTimeout(() => {
       this.setGameState(STATE.HOME);
@@ -817,6 +839,7 @@ class PotteryGame {
       return;
     }
 
+    this.isCompletingPot = true;
     this.coins -= keepCost;
     this.updateCoinDisplay();
     sound.playCoinsSound();
@@ -840,7 +863,11 @@ class PotteryGame {
     localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
     this.updateGalleryBadge();
     this.updateProfileModalUI();
+
     this.clearDraft();
+    this.potteryModel.reset();
+    this.painter.initBaseClay();
+    this.resetClayMaterialToRaw();
 
     this.showToast("📦 Pot Saved to Gallery! (-10 🪙)");
     setTimeout(() => {
