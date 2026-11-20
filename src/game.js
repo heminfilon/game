@@ -168,17 +168,34 @@ class PotteryGame {
   }
 
   updateProfileModalUI() {
-    document.getElementById('stat-pots-created').innerText = this.stats.potsCreated;
-    document.getElementById('stat-pots-sold').innerText = this.stats.potsSold;
-    document.getElementById('stat-in-inventory').innerText = this.gallery.length;
-    document.getElementById('stat-pots-destroyed').innerText = this.stats.potsDestroyed;
-    document.getElementById('stat-coins-earned').innerText = this.stats.coinsEarned;
+    const hasPending = localStorage.getItem('pottery_current_draft') ? 1 : 0;
+    const sold = this.stats.potsSold || 0;
+    const inventory = this.gallery.length || 0;
+    const destroyed = this.stats.potsDestroyed || 0;
+    
+    // Total pots created = sum of (pot sold + inventory + destroyed + pending) as requested!
+    const totalCreated = sold + inventory + destroyed + hasPending;
+
+    const elCreated = document.getElementById('stat-pots-created');
+    const elSold = document.getElementById('stat-pots-sold');
+    const elInv = document.getElementById('stat-in-inventory');
+    const elDestroyed = document.getElementById('stat-pots-destroyed');
+    const elPending = document.getElementById('stat-pots-pending');
+    const elCoins = document.getElementById('stat-coins-earned');
+
+    if (elCreated) elCreated.innerText = totalCreated;
+    if (elSold) elSold.innerText = sold;
+    if (elInv) elInv.innerText = inventory;
+    if (elDestroyed) elDestroyed.innerText = destroyed;
+    if (elPending) elPending.innerText = hasPending;
+    if (elCoins) elCoins.innerText = this.stats.coinsEarned || 0;
 
     let rank = "Apprentice Potter";
-    if (this.stats.potsSold >= 15) rank = "Legendary Artisan";
-    else if (this.stats.potsSold >= 8) rank = "Master Ceramist";
-    else if (this.stats.potsSold >= 3) rank = "Skilled Craftsman";
-    document.getElementById('profile-rank').innerText = rank;
+    if (sold >= 15) rank = "Legendary Artisan";
+    else if (sold >= 8) rank = "Master Ceramist";
+    else if (sold >= 3) rank = "Skilled Craftsman";
+    const rankEl = document.getElementById('profile-rank');
+    if (rankEl) rankEl.innerText = rank;
 
     localStorage.setItem('pottery_stats', JSON.stringify(this.stats));
   }
@@ -208,6 +225,7 @@ class PotteryGame {
       };
       localStorage.setItem('pottery_current_draft', JSON.stringify(draft));
       this.checkResumeDraftButton();
+      this.updateProfileModalUI();
     } catch (e) {
       console.warn("Draft save error:", e);
     }
@@ -216,16 +234,22 @@ class PotteryGame {
   clearDraft() {
     localStorage.removeItem('pottery_current_draft');
     this.checkResumeDraftButton();
+    this.updateProfileModalUI();
   }
 
   checkResumeDraftButton() {
-    const btn = document.getElementById('btn-resume-pot');
-    if (!btn) return;
+    const resumeBtn = document.getElementById('btn-resume-pot');
+    const newBtn = document.getElementById('btn-start-new-pot');
+    if (!resumeBtn || !newBtn) return;
     const raw = localStorage.getItem('pottery_current_draft');
     if (raw) {
-      btn.style.display = 'flex';
+      // If previous pending pottery exists, ONLY show "Continue Pending Pottery"!
+      resumeBtn.style.display = 'flex';
+      resumeBtn.innerText = "🏺 Continue Pending Pottery";
+      newBtn.style.display = 'none';
     } else {
-      btn.style.display = 'none';
+      resumeBtn.style.display = 'none';
+      newBtn.style.display = 'flex';
     }
   }
 
