@@ -5,7 +5,6 @@ class SoundEngine {
     this.enabled = true;
     this.wheelGain = null;
     this.wheelOsc = null;
-    this.clayGain = null;
     this.kilnGain = null;
   }
 
@@ -29,7 +28,6 @@ class SoundEngine {
   setupContinuousSounds() {
     if (!this.ctx) return;
 
-    // Potter's Wheel subtle motor/spin hum
     try {
       this.wheelOsc = this.ctx.createOscillator();
       this.wheelOsc.type = 'triangle';
@@ -190,12 +188,84 @@ class SoundEngine {
     } catch (e) {}
   }
 
+  // Ceramic Shatter / Crash Sound when pot breaks
+  playShatterSound() {
+    if (!this.ctx || !this.enabled) return;
+    try {
+      const now = this.ctx.currentTime;
+      // White noise explosion + descending high-frequency shards
+      const bufferSize = this.ctx.sampleRate * 0.5;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(1800, now);
+      filter.frequency.exponentialRampToValueAtTime(300, now + 0.4);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      noise.start(now);
+
+      // Metallic/ceramic dissonant clinks
+      [1200, 950, 720, 480].forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq + Math.random() * 100, now + idx * 0.04);
+        osc.frequency.exponentialRampToValueAtTime(120, now + idx * 0.04 + 0.25);
+
+        g.gain.setValueAtTime(0.18, now + idx * 0.04);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.25);
+
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start(now + idx * 0.04);
+        osc.stop(now + idx * 0.04 + 0.26);
+      });
+    } catch (e) {}
+  }
+
+  // Unlock / Purchase celebration chime
+  playUnlockSound() {
+    if (!this.ctx || !this.enabled) return;
+    try {
+      const now = this.ctx.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+      notes.forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+
+        gain.gain.setValueAtTime(0.1, now + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.4);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.42);
+      });
+    } catch (e) {}
+  }
+
   // Coins collected chime
   playCoinsSound() {
     if (!this.ctx || !this.enabled) return;
     try {
       const now = this.ctx.currentTime;
-      const notes = [987.77, 1318.51, 1567.98, 1975.53]; // B5, E6, G6, B6
+      const notes = [987.77, 1318.51, 1567.98, 1975.53];
       notes.forEach((freq, i) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -214,7 +284,7 @@ class SoundEngine {
     } catch (e) {}
   }
 
-  // Bargain deal gavel / hammer sound
+  // Bargain deal gavel sound
   playGavelSound() {
     if (!this.ctx || !this.enabled) return;
     try {

@@ -19,11 +19,28 @@ class PotteryGame {
     this.state = STATE.HOME;
     this.coins = parseInt(localStorage.getItem('pottery_coins') || '100', 10);
     this.gallery = JSON.parse(localStorage.getItem('pottery_gallery') || '[]');
+    
+    // Player statistics
+    this.stats = JSON.parse(localStorage.getItem('pottery_stats') || JSON.stringify({
+      potsCreated: 0,
+      potsSold: 0,
+      coinsEarned: 0
+    }));
 
-    // Setup Three.js
+    // Active pot inspecting from inventory (null if creating fresh)
+    this.activeInventoryPotId = null;
+    this.pendingUnlockItem = null;
+
+    // Three.js setup
     this.container = document.getElementById('canvas-container');
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    
+    // Camera positioned & framed specifically to keep pot fully within mobile screen!
+    this.camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
+    this.camera.position.set(0, 1.85, 5.6);
+    this.cameraTarget = new THREE.Vector3(0, 1.15, 0);
+    this.camera.lookAt(this.cameraTarget);
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -31,12 +48,6 @@ class PotteryGame {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // Camera setup
-    this.camera.position.set(0, 2.2, 5.2);
-    this.cameraTarget = new THREE.Vector3(0, 1.2, 0);
-    this.camera.lookAt(this.cameraTarget);
-
-    // Raycaster for touch/click interaction
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
 
@@ -50,105 +61,91 @@ class PotteryGame {
     // Interaction flags
     this.isInteracting = false;
     this.lastPointerPos = { x: 0, y: 0 };
-    this.wheelSpeed = 0.02;
+    this.wheelSpeed = 0.015;
     this.isFiring = false;
 
     // Bargaining state
     this.bargainData = null;
-
-    // Palette Colors
-    this.paletteColors = [
-      '#2b4c7e', // Cobalt Blue
-      '#1b6b50', // Jade Emerald
-      '#a83232', // Terracotta Crimson
-      '#e5a93c', // Imperial Gold
-      '#2c2d30', // Charcoal Obsidian
-      '#f4f1ea', // Ivory Porcelain
-      '#8f53a1', // Royal Amethyst
-      '#c27c3f'  // Raw Clay
-    ];
 
     this.initSceneLights();
     this.initPotterWheel();
     this.initPotMesh();
     this.bindEvents();
     this.bindUI();
+    this.buildStoreCatalogUI();
     this.updateCoinDisplay();
     this.updateGalleryBadge();
+    this.updateProfileModalUI();
 
-    // Start render loop
+    // Render loop
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
   }
 
   initSceneLights() {
-    this.scene.background = new THREE.Color(0x131418);
+    this.scene.background = new THREE.Color(0x121316);
 
     // Studio Ambient Light
-    this.ambientLight = new THREE.AmbientLight(0xfff5ea, 0.9);
+    this.ambientLight = new THREE.AmbientLight(0xfff6ed, 0.95);
     this.scene.add(this.ambientLight);
 
-    // Key Light (Main soft shadow)
-    this.keyLight = new THREE.DirectionalLight(0xfff8ee, 1.4);
-    this.keyLight.position.set(4, 6, 4);
+    // Key Light
+    this.keyLight = new THREE.DirectionalLight(0xfffaee, 1.5);
+    this.keyLight.position.set(3.5, 6, 4);
     this.keyLight.castShadow = true;
     this.keyLight.shadow.mapSize.width = 1024;
     this.keyLight.shadow.mapSize.height = 1024;
     this.scene.add(this.keyLight);
 
-    // Rim light from behind for silhouette definition
-    this.rimLight = new THREE.DirectionalLight(0xa6c8ff, 0.8);
-    this.rimLight.position.set(-4, 3, -3);
+    // Rim light from behind
+    this.rimLight = new THREE.DirectionalLight(0x90baff, 0.85);
+    this.rimLight.position.set(-3.5, 3.5, -3);
     this.scene.add(this.rimLight);
 
-    // Soft warm fill light
-    this.fillLight = new THREE.PointLight(0xffcaa0, 0.6, 10);
-    this.fillLight.position.set(0, 0.8, 2.5);
+    // Warm soft fill light
+    this.fillLight = new THREE.PointLight(0xffc599, 0.65, 10);
+    this.fillLight.position.set(0, 0.9, 2.5);
     this.scene.add(this.fillLight);
 
-    // Kiln fiery glow light (normally 0 intensity)
+    // Kiln fiery glow light
     this.kilnLight = new THREE.PointLight(0xff4500, 0, 8);
-    this.kilnLight.position.set(0, 1.5, 0.5);
+    this.kilnLight.position.set(0, 1.4, 0.5);
     this.scene.add(this.kilnLight);
   }
 
   initPotterWheel() {
-    // Wheel Head Turntable
-    const wheelGeo = new THREE.CylinderGeometry(1.9, 2.05, 0.25, 48);
+    const wheelGeo = new THREE.CylinderGeometry(1.85, 2.0, 0.22, 48);
     const wheelMat = new THREE.MeshStandardMaterial({
-      color: 0x22242b,
-      metalness: 0.6,
+      color: 0x24262e,
+      metalness: 0.55,
       roughness: 0.35
     });
     this.wheelHead = new THREE.Mesh(wheelGeo, wheelMat);
-    this.wheelHead.position.y = -0.125;
+    this.wheelHead.position.y = -0.11;
     this.wheelHead.receiveShadow = true;
     this.wheelHead.castShadow = true;
     this.wheelGroup.add(this.wheelHead);
 
-    // Concentric brass rings on wheel
-    const ringGeo = new THREE.TorusGeometry(1.4, 0.015, 16, 64);
-    const ringMat = new THREE.MeshStandardMaterial({ color: 0x997a3a, metalness: 0.8, roughness: 0.3 });
+    const ringGeo = new THREE.TorusGeometry(1.35, 0.015, 16, 64);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xa8853b, metalness: 0.85, roughness: 0.3 });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.005;
     this.wheelHead.add(ring);
 
-    // Studio Table Surface
-    const tableGeo = new THREE.CylinderGeometry(5.5, 5.5, 0.5, 32);
+    const tableGeo = new THREE.CylinderGeometry(5.2, 5.2, 0.5, 32);
     const tableMat = new THREE.MeshStandardMaterial({
-      color: 0x18191f,
+      color: 0x16171d,
       roughness: 0.85,
       metalness: 0.1
     });
     const table = new THREE.Mesh(tableGeo, tableMat);
-    table.position.y = -0.5;
+    table.position.y = -0.45;
     table.receiveShadow = true;
     this.scene.add(table);
   }
 
   initPotMesh() {
-    // Ceramic material with dynamic painter canvas texture
     this.clayMaterial = new THREE.MeshPhysicalMaterial({
       map: this.painter.texture,
       roughness: 0.88,
@@ -165,13 +162,30 @@ class PotteryGame {
 
   updateCoinDisplay() {
     const el = document.getElementById('coin-count');
+    const homeEl = document.getElementById('home-coin-count');
     if (el) el.innerText = this.coins;
+    if (homeEl) homeEl.innerText = this.coins;
     localStorage.setItem('pottery_coins', this.coins.toString());
   }
 
   updateGalleryBadge() {
     const el = document.getElementById('gallery-count-badge');
     if (el) el.innerText = this.gallery.length;
+  }
+
+  updateProfileModalUI() {
+    document.getElementById('stat-pots-created').innerText = this.stats.potsCreated;
+    document.getElementById('stat-pots-sold').innerText = this.stats.potsSold;
+    document.getElementById('stat-in-inventory').innerText = this.gallery.length;
+    document.getElementById('stat-coins-earned').innerText = this.stats.coinsEarned;
+
+    let rank = "Apprentice Potter";
+    if (this.stats.potsSold >= 15) rank = "Legendary Artisan";
+    else if (this.stats.potsSold >= 8) rank = "Master Ceramist";
+    else if (this.stats.potsSold >= 3) rank = "Skilled Craftsman";
+    document.getElementById('profile-rank').innerText = rank;
+
+    localStorage.setItem('pottery_stats', JSON.stringify(this.stats));
   }
 
   showToast(msg) {
@@ -183,22 +197,148 @@ class PotteryGame {
     this.toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
   }
 
-  // State Transition Machine
+  // --- STORE & UNLOCK CATALOG UI ---
+  buildStoreCatalogUI() {
+    // Colors Column
+    const palCol = document.getElementById('palette-column');
+    if (!palCol) return;
+    palCol.innerHTML = '';
+
+    this.painter.catalog.colors.forEach((col) => {
+      const wrap = document.createElement('div');
+      const isUnlocked = this.painter.isUnlocked(col.id);
+      const isActive = this.painter.brushColor === col.color;
+      wrap.className = `swatch-wrap ${isActive ? 'active' : ''}`;
+
+      const swatch = document.createElement('div');
+      swatch.className = 'color-swatch';
+      swatch.style.backgroundColor = col.color;
+
+      if (!isUnlocked) {
+        const lock = document.createElement('div');
+        lock.className = 'lock-badge';
+        lock.innerText = '🔒';
+        wrap.appendChild(lock);
+      }
+
+      wrap.appendChild(swatch);
+      wrap.onclick = () => {
+        if (this.painter.isUnlocked(col.id)) {
+          sound.playClick();
+          document.querySelectorAll('.swatch-wrap').forEach(w => w.classList.remove('active'));
+          wrap.classList.add('active');
+          this.painter.brushColor = col.color;
+        } else {
+          // Prompt unlock
+          this.promptUnlockItem(col, 'color');
+        }
+      };
+
+      palCol.appendChild(wrap);
+    });
+
+    // Patterns Column
+    const patCol = document.getElementById('pattern-column');
+    if (!patCol) return;
+    patCol.innerHTML = '';
+
+    const toolIcons = {
+      'brush': '🖌️',
+      'band': '🎗️',
+      'pattern_tribal': '🔶',
+      'pattern_greek': '🏛️',
+      'pattern_floral': '🌸',
+      'pattern_gold': '👑'
+    };
+
+    this.painter.catalog.patterns.forEach((pat) => {
+      const btn = document.createElement('div');
+      const isUnlocked = this.painter.isUnlocked(pat.id);
+      const isActive = this.painter.selectedTool === pat.id;
+      btn.className = `tool-icon-btn ${isActive ? 'active' : ''}`;
+      btn.innerText = toolIcons[pat.id] || '🎨';
+
+      if (!isUnlocked) {
+        const lock = document.createElement('div');
+        lock.className = 'lock-badge';
+        lock.innerText = '🔒';
+        btn.appendChild(lock);
+      }
+
+      btn.onclick = () => {
+        if (this.painter.isUnlocked(pat.id)) {
+          sound.playClick();
+          document.querySelectorAll('.tool-icon-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.painter.selectedTool = pat.id;
+        } else {
+          this.promptUnlockItem(pat, 'pattern');
+        }
+      };
+
+      patCol.appendChild(btn);
+    });
+  }
+
+  promptUnlockItem(item, type) {
+    sound.playClick();
+    this.pendingUnlockItem = item;
+    const modal = document.getElementById('unlock-modal');
+    document.getElementById('unlock-item-icon').innerText = type === 'color' ? '🎨' : '✨';
+    document.getElementById('unlock-item-title').innerText = `Unlock ${item.name}`;
+    document.getElementById('unlock-item-desc').innerText = 
+      `Unlock this premium ${type} permanently for ${item.price} coins?`;
+    document.getElementById('unlock-cost-text').innerText = item.price;
+    modal.style.display = 'flex';
+  }
+
+  confirmUnlockItem() {
+    if (!this.pendingUnlockItem) return;
+    const item = this.pendingUnlockItem;
+    if (this.coins < item.price) {
+      sound.playClick();
+      this.showToast(`⚠️ Need ${item.price} coins! Sell pottery to earn coins.`);
+      document.getElementById('unlock-modal').style.display = 'none';
+      return;
+    }
+
+    this.coins -= item.price;
+    this.updateCoinDisplay();
+    this.painter.unlockItem(item.id);
+    sound.playUnlockSound();
+    this.showToast(`✨ Unlocked ${item.name}!`);
+
+    // Auto-select unlocked item
+    if (item.color) {
+      this.painter.brushColor = item.color;
+    } else {
+      this.painter.selectedTool = item.id;
+    }
+
+    document.getElementById('unlock-modal').style.display = 'none';
+    this.buildStoreCatalogUI();
+  }
+
+  // --- STATE TRANSITIONS ---
   setGameState(newState) {
     this.state = newState;
     sound.ensureContext();
 
-    // Hide all state panels
-    const panels = [
+    // Hide all docks and panels
+    const elements = [
       'home-screen',
-      'panel-shaping',
-      'panel-decorating',
-      'panel-kiln',
-      'panel-decision',
+      'dock-shaping',
+      'side-tray-left',
+      'side-tray-right',
+      'dock-decorating',
+      'dock-kiln',
+      'dock-decision',
       'panel-bargain',
-      'gallery-modal'
+      'gallery-modal',
+      'profile-modal',
+      'unlock-modal'
     ];
-    panels.forEach(id => {
+    elements.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
@@ -209,6 +349,7 @@ class PotteryGame {
 
     if (kilnFx) kilnFx.classList.remove('firing');
     this.kilnLight.intensity = 0;
+    this.potMesh.visible = true;
 
     switch (newState) {
       case STATE.HOME:
@@ -217,13 +358,14 @@ class PotteryGame {
         document.getElementById('home-screen').style.display = 'flex';
         this.wheelSpeed = 0.008;
         sound.setWheelSound(false);
+        this.activeInventoryPotId = null;
         break;
 
       case STATE.SHAPING:
         stageTitle.innerText = "Step 1: Shape Clay";
         heightHud.style.display = 'flex';
-        document.getElementById('panel-shaping').style.display = 'flex';
-        this.wheelSpeed = 0.025;
+        document.getElementById('dock-shaping').style.display = 'flex';
+        this.wheelSpeed = 0.024;
         sound.setWheelSound(true, 1.0);
         this.resetClayMaterialToRaw();
         this.updateHeightHUD();
@@ -232,15 +374,18 @@ class PotteryGame {
       case STATE.DECORATING:
         stageTitle.innerText = "Step 2: Paint & Decorate";
         heightHud.style.display = 'none';
-        document.getElementById('panel-decorating').style.display = 'flex';
-        this.wheelSpeed = 0.005;
+        document.getElementById('side-tray-left').style.display = 'flex';
+        document.getElementById('side-tray-right').style.display = 'flex';
+        document.getElementById('dock-decorating').style.display = 'flex';
+        this.wheelSpeed = 0.004;
         sound.setWheelSound(false);
+        this.buildStoreCatalogUI();
         break;
 
       case STATE.KILN:
         stageTitle.innerText = "Step 3: Fire in Kiln";
         heightHud.style.display = 'none';
-        document.getElementById('panel-kiln').style.display = 'flex';
+        document.getElementById('dock-kiln').style.display = 'flex';
         document.getElementById('btn-start-firing').style.display = 'block';
         document.getElementById('btn-inspect-pot').style.display = 'none';
         document.getElementById('kiln-temp-text').innerText = "25 °C";
@@ -250,16 +395,16 @@ class PotteryGame {
         break;
 
       case STATE.DECISION:
-        stageTitle.innerText = "Step 4: Keep or Sell";
+        stageTitle.innerText = "Masterpiece Appraisal";
         heightHud.style.display = 'none';
-        document.getElementById('panel-decision').style.display = 'flex';
+        document.getElementById('dock-decision').style.display = 'flex';
         this.wheelSpeed = 0.012;
         sound.setWheelSound(false);
         this.setupDecisionCard();
         break;
 
       case STATE.BARGAIN:
-        stageTitle.innerText = "Auction & Bargain";
+        stageTitle.innerText = "Art Auction & Bargain";
         heightHud.style.display = 'none';
         document.getElementById('panel-bargain').style.display = 'block';
         this.wheelSpeed = 0.012;
@@ -302,9 +447,20 @@ class PotteryGame {
       decorBonus,
       totalPredictedPrice
     };
+
+    // Toggle normal actions vs inventory inspection action
+    const normalActions = document.getElementById('decision-normal-actions');
+    const invActions = document.getElementById('decision-inventory-actions');
+    if (this.activeInventoryPotId) {
+      normalActions.style.display = 'none';
+      invActions.style.display = 'block';
+    } else {
+      normalActions.style.display = 'grid';
+      invActions.style.display = 'none';
+    }
   }
 
-  // --- STAGE 3: KILN FIRING ANIMATION ---
+  // --- KILN FIRING ---
   startKilnFiring() {
     if (this.isFiring) return;
     this.isFiring = true;
@@ -322,33 +478,28 @@ class PotteryGame {
 
     let currentTemp = 25;
     const targetTemp = 1250;
-    const durationMs = 3200;
+    const durationMs = 3000;
     const startTime = performance.now();
 
     const updateKiln = (now) => {
       const elapsed = now - startTime;
       const progress = Math.min(1.0, elapsed / durationMs);
-
-      // Smooth cubic curve for temperature ramp
       const ease = 1 - Math.pow(1 - progress, 3);
       currentTemp = Math.round(25 + (targetTemp - 25) * ease);
 
       tempText.innerText = `${currentTemp} °C`;
       tempFill.style.width = `${progress * 100}%`;
-
-      // Glow light intensity
       this.kilnLight.intensity = Math.sin(progress * Math.PI) * 4.5;
 
-      // Metamorphosis: clay becomes smooth, hardened, high-gloss glazed ceramic!
-      this.clayMaterial.roughness = 0.88 - progress * 0.73; // 0.88 -> 0.15
-      this.clayMaterial.metalness = 0.05 + progress * 0.15; // 0.05 -> 0.20
-      this.clayMaterial.clearcoat = progress * 1.0;         // 0.0 -> 1.0
+      // Metamorphosis into glazed ceramic
+      this.clayMaterial.roughness = 0.88 - progress * 0.73;
+      this.clayMaterial.metalness = 0.05 + progress * 0.15;
+      this.clayMaterial.clearcoat = progress * 1.0;
       this.clayMaterial.clearcoatRoughness = 0.3 - progress * 0.22;
 
       if (progress < 1.0) {
         requestAnimationFrame(updateKiln);
       } else {
-        // Firing finished!
         this.isFiring = false;
         sound.stopKilnSound();
         sound.playCeramicPing();
@@ -362,21 +513,20 @@ class PotteryGame {
     requestAnimationFrame(updateKiln);
   }
 
-  // --- STAGE 5: BARGAIN & SELLING MINI-GAME ---
+  // --- BARGAIN & SELLING MINI-GAME ---
   initBargainStage() {
     const collectors = [
-      { name: "Collector Hans", avatar: "🧐", title: "Antique Connoisseur", mood: "analytical" },
-      { name: "Madame Vivienne", avatar: "👒", title: "Luxury Gallery Owner", mood: "refined" },
-      { name: "Lord Sterling", avatar: "🎩", title: "Royal Ceramic Enthusiast", mood: "demanding" },
-      { name: "Curator Kenji", avatar: "🎎", title: "Museum Appraiser", mood: "zen" }
+      { name: "Collector Hans", avatar: "🧐", title: "Antique Appraiser" },
+      { name: "Madame Vivienne", avatar: "👒", title: "Luxury Curator" },
+      { name: "Lord Sterling", avatar: "🎩", title: "Royal Connoisseur" },
+      { name: "Master Kenji", avatar: "🎎", title: "Ceramic Master" }
     ];
 
     const collector = collectors[Math.floor(Math.random() * collectors.length)];
     const predicted = this.currentPotStats.totalPredictedPrice;
     const height = this.currentPotStats.heightCm;
 
-    // Opening offer (70% - 75% of predicted value)
-    const initialOffer = Math.max(20, Math.round(predicted * (0.7 + Math.random() * 0.08)));
+    const initialOffer = Math.max(20, Math.round(predicted * (0.72 + Math.random() * 0.06)));
 
     this.bargainData = {
       collector,
@@ -392,63 +542,66 @@ class PotteryGame {
     document.getElementById('patience-text').innerText = '100%';
     document.getElementById('patience-fill').style.width = '100%';
     document.getElementById('patience-fill').style.backgroundColor = '#38b000';
+    document.getElementById('btn-haggle-counter').disabled = false;
+    document.getElementById('btn-sweet-talk').disabled = false;
 
-    // Dialogue influenced by height (as requested by user)
-    const heightComments = height > 32 
-      ? `Impressive towering height of ${height} cm! A magnificent sculpture.`
-      : `Delightful proportions! A charming ${height} cm piece.`;
+    const heightComments = height > 28 
+      ? `Impressive towering height of ${height} cm! A striking piece.`
+      : `Delightful proportions! A refined ${height} cm piece.`;
 
     document.getElementById('dealer-dialogue').innerText = 
-      `"${heightComments} My initial offer is ${initialOffer} coins."`;
+      `"${heightComments} I can offer ${initialOffer} coins."`;
   }
 
   handleHaggle() {
-    if (!this.bargainData || this.bargainData.patience <= 0) return;
+    if (!this.bargainData) return;
 
     sound.playClick();
     this.bargainData.round++;
-    const drop = 28 + Math.floor(Math.random() * 12);
+    const drop = 32 + Math.floor(Math.random() * 10);
     this.bargainData.patience = Math.max(0, this.bargainData.patience - drop);
 
-    // Update patience bar
     const pFill = document.getElementById('patience-fill');
     pFill.style.width = `${this.bargainData.patience}%`;
     document.getElementById('patience-text').innerText = `${this.bargainData.patience}%`;
 
-    if (this.bargainData.patience < 35) {
+    if (this.bargainData.patience <= 0) {
+      // PATIENCE EXCEEDED: POT DESTROYED & 10 COIN PENALTY AS REQUESTED!
+      this.handleBargainCrashPenalty();
+      return;
+    }
+
+    if (this.bargainData.patience < 40) {
       pFill.style.backgroundColor = '#e05252';
-    } else if (this.bargainData.patience < 65) {
+    } else if (this.bargainData.patience < 70) {
       pFill.style.backgroundColor = '#f3b942';
     }
 
-    // Raise offer
-    if (this.bargainData.patience > 0) {
-      const raise = Math.max(8, Math.round(this.bargainData.predicted * 0.12));
-      this.bargainData.currentOffer = Math.min(
-        Math.round(this.bargainData.predicted * 1.25),
-        this.bargainData.currentOffer + raise
-      );
+    const raise = Math.max(8, Math.round(this.bargainData.predicted * 0.12));
+    this.bargainData.currentOffer = Math.min(
+      Math.round(this.bargainData.predicted * 1.25),
+      this.bargainData.currentOffer + raise
+    );
 
-      document.getElementById('deal-offer-amount').innerText = this.bargainData.currentOffer;
-      document.getElementById('dealer-dialogue').innerText = 
-        `"You drive a tough bargain! Very well, how about ${this.bargainData.currentOffer} coins?"`;
-    } else {
-      // Out of patience! Final offer or slight penalty
-      document.getElementById('dealer-dialogue').innerText = 
-        `"That's my absolute limit! Take ${this.bargainData.currentOffer} coins or I must walk away."`;
-      document.getElementById('btn-haggle-counter').disabled = true;
-      document.getElementById('btn-sweet-talk').disabled = true;
-    }
+    document.getElementById('deal-offer-amount').innerText = this.bargainData.currentOffer;
+    document.getElementById('dealer-dialogue').innerText = 
+      `"You drive a tough bargain! How about ${this.bargainData.currentOffer} coins?"`;
   }
 
   handleSweetTalk() {
-    if (!this.bargainData || this.bargainData.patience <= 0) return;
+    if (!this.bargainData) return;
     sound.playClick();
 
-    // Compliment craft restores some patience or increases bonus
+    const drop = 18;
+    this.bargainData.patience = Math.max(0, this.bargainData.patience - drop);
+
+    if (this.bargainData.patience <= 0) {
+      this.handleBargainCrashPenalty();
+      return;
+    }
+
     const bump = Math.max(5, Math.round(this.bargainData.predicted * 0.07));
     this.bargainData.currentOffer += bump;
-    this.bargainData.patience = Math.max(10, this.bargainData.patience - 15);
 
     const pFill = document.getElementById('patience-fill');
     pFill.style.width = `${this.bargainData.patience}%`;
@@ -456,17 +609,65 @@ class PotteryGame {
     document.getElementById('deal-offer-amount').innerText = this.bargainData.currentOffer;
 
     document.getElementById('dealer-dialogue').innerText = 
-      `"You speak with true passion for your craft! I can raise my bid to ${this.bargainData.currentOffer} coins."`;
+      `"You speak with true passion for your craft! I can bid ${this.bargainData.currentOffer} coins."`;
+  }
+
+  // Pot destroyed and 10 coin penalty when bargaining limits are breached
+  handleBargainCrashPenalty() {
+    sound.playShatterSound();
+
+    // Red screen shatter animation
+    const shatter = document.getElementById('shatter-fx');
+    shatter.classList.add('show');
+    this.potMesh.visible = false;
+
+    // Deduct 10 coins penalty as requested
+    const penalty = 10;
+    this.coins = Math.max(0, this.coins - penalty);
+    this.updateCoinDisplay();
+
+    // If pot was from gallery, remove it because it shattered!
+    if (this.activeInventoryPotId) {
+      this.gallery = this.gallery.filter(p => p.id !== this.activeInventoryPotId);
+      localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
+      this.updateGalleryBadge();
+      this.activeInventoryPotId = null;
+    }
+
+    document.getElementById('dealer-dialogue').innerText = 
+      `"OUTRAGEOUS! The collector slammed the table in fury—your pottery shattered! (-10 🪙 Penalty)"`;
+
+    document.getElementById('btn-haggle-counter').disabled = true;
+    document.getElementById('btn-sweet-talk').disabled = true;
+    document.getElementById('btn-accept-deal').disabled = true;
+
+    this.showToast("💥 Pot shattered! You were fined 10 coins.");
+
+    setTimeout(() => {
+      shatter.classList.remove('show');
+      this.setGameState(STATE.HOME);
+    }, 2200);
   }
 
   handleAcceptDeal() {
     if (!this.bargainData) return;
     const earned = this.bargainData.currentOffer;
     this.coins += earned;
+    this.stats.potsSold++;
+    this.stats.coinsEarned += earned;
     this.updateCoinDisplay();
+    this.updateProfileModalUI();
 
     sound.playGavelSound();
     setTimeout(() => sound.playCoinsSound(), 200);
+
+    // If sold from inventory, remove from inventory!
+    if (this.activeInventoryPotId) {
+      this.gallery = this.gallery.filter(p => p.id !== this.activeInventoryPotId);
+      localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
+      this.updateGalleryBadge();
+      this.activeInventoryPotId = null;
+    }
 
     this.showToast(`🎉 Sold for ${earned} Coins!`);
     setTimeout(() => {
@@ -474,9 +675,8 @@ class PotteryGame {
     }, 1200);
   }
 
-  // --- STAGE 4: KEEP DECISION ---
+  // --- KEEP IN INVENTORY ---
   handleKeepPot() {
-    // Keep option charges 10 in-game coins as requested by user
     const keepCost = 10;
     if (this.coins < keepCost) {
       sound.playClick();
@@ -488,9 +688,9 @@ class PotteryGame {
     this.updateCoinDisplay();
     sound.playCoinsSound();
 
-    // Render snapshot
     this.renderer.render(this.scene, this.camera);
     const thumbData = this.renderer.domElement.toDataURL('image/jpeg', 0.6);
+    const textureData = this.painter.toDataURL(); // Save exact artwork!
 
     const potRecord = {
       id: Date.now(),
@@ -499,12 +699,14 @@ class PotteryGame {
       heightCm: this.currentPotStats.heightCm,
       price: this.currentPotStats.totalPredictedPrice,
       thumb: thumbData,
-      meshData: this.potteryModel.exportData()
+      meshData: this.potteryModel.exportData(),
+      textureData: textureData
     };
 
     this.gallery.unshift(potRecord);
     localStorage.setItem('pottery_gallery', JSON.stringify(this.gallery));
     this.updateGalleryBadge();
+    this.updateProfileModalUI();
 
     this.showToast("📦 Pot Saved to Gallery! (-10 🪙)");
     setTimeout(() => {
@@ -522,34 +724,45 @@ class PotteryGame {
         <div style="grid-column: 1 / -1; text-align: center; color: var(--text-sub); padding: 50px 20px;">
           <p style="font-size: 32px; margin-bottom: 8px;">🏺</p>
           <p>Your Gallery is currently empty.</p>
-          <p style="font-size: 13px; margin-top: 4px;">Create and keep pots for 10 coins to display them here!</p>
+          <p style="font-size: 13px; margin-top: 4px;">Save your pottery for 10 coins to exhibit them here!</p>
         </div>
       `;
       return;
     }
 
-    this.gallery.forEach((pot, idx) => {
+    this.gallery.forEach((pot) => {
       const item = document.createElement('div');
       item.className = 'gallery-item';
       item.innerHTML = `
         <img class="gallery-thumb" src="${pot.thumb}" alt="${pot.styleName}" />
         <div style="width: 100%; text-align: left;">
-          <div style="font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${pot.styleName}</div>
-          <div style="font-size: 11px; color: var(--text-sub); display: flex; justify-content: space-between; margin-top: 3px;">
+          <div style="font-weight: 700; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${pot.styleName}</div>
+          <div style="font-size: 11px; color: var(--text-sub); display: flex; justify-content: space-between; margin-top: 2px;">
             <span>${pot.heightCm} cm</span>
-            <span style="color: var(--gold); font-weight: 600;">${pot.price} 🪙</span>
+            <span style="color: var(--gold); font-weight: 700;">${pot.price} 🪙</span>
           </div>
         </div>
       `;
 
       item.onclick = () => {
-        // Load pot into 3D view
+        // Load exact pot 3D geometry & exact painted texture!
         this.potteryModel.importData(pot.meshData);
+        if (pot.textureData) {
+          this.painter.loadFromDataURL(pot.textureData);
+        }
+
+        // Fired ceramic glaze material
+        this.clayMaterial.roughness = 0.15;
+        this.clayMaterial.metalness = 0.2;
+        this.clayMaterial.clearcoat = 1.0;
+
         this.currentPotStats = {
           styleName: pot.styleName,
           heightCm: pot.heightCm,
           totalPredictedPrice: pot.price
         };
+
+        this.activeInventoryPotId = pot.id;
         document.getElementById('gallery-modal').style.display = 'none';
         this.setGameState(STATE.DECISION);
       };
@@ -558,7 +771,7 @@ class PotteryGame {
     });
   }
 
-  // --- UI & TOUCH EVENT BINDINGS ---
+  // --- UI BINDINGS ---
   bindUI() {
     // Top Bar
     document.getElementById('btn-sound').onclick = (e) => {
@@ -571,9 +784,35 @@ class PotteryGame {
       this.setGameState(STATE.HOME);
     };
 
+    // Profile Modals
+    const openProfile = () => {
+      sound.playClick();
+      this.updateProfileModalUI();
+      document.getElementById('profile-modal').style.display = 'flex';
+    };
+    document.getElementById('btn-open-profile').onclick = openProfile;
+    document.getElementById('btn-home-profile').onclick = openProfile;
+    document.getElementById('btn-close-profile').onclick = () => {
+      sound.playClick();
+      document.getElementById('profile-modal').style.display = 'none';
+    };
+
+    // Store Unlock Modal
+    document.getElementById('btn-cancel-unlock').onclick = () => {
+      sound.playClick();
+      document.getElementById('unlock-modal').style.display = 'none';
+      this.pendingUnlockItem = null;
+    };
+    document.getElementById('btn-confirm-unlock').onclick = () => {
+      this.confirmUnlockItem();
+    };
+
     // Home Screen
     document.getElementById('btn-start-new-pot').onclick = () => {
       sound.playClick();
+      this.stats.potsCreated++;
+      this.updateProfileModalUI();
+      this.activeInventoryPotId = null;
       this.potteryModel.reset();
       this.painter.initBaseClay();
       this.setGameState(STATE.SHAPING);
@@ -592,62 +831,76 @@ class PotteryGame {
       }
     };
 
-    // Stage 1: Shaping
-    document.getElementById('btn-smooth-clay').onclick = () => {
+    // Stage 1: Shaping Dock & Minimization
+    const shapingDock = document.getElementById('dock-shaping');
+    document.getElementById('btn-toggle-shaping-dock').onclick = (e) => {
+      sound.playClick();
+      shapingDock.classList.toggle('minimized');
+      e.currentTarget.innerText = shapingDock.classList.contains('minimized') ? '▲' : '▼';
+    };
+
+    const doSmooth = () => {
       sound.playClayTouch(0.6);
       this.potteryModel.smoothProfile();
       this.updateHeightHUD();
     };
-
-    document.getElementById('btn-reset-clay').onclick = () => {
+    const doReset = () => {
       sound.playClick();
       this.potteryModel.reset();
       this.updateHeightHUD();
     };
-
-    document.getElementById('btn-finish-shape').onclick = () => {
+    const doFinishShape = () => {
       sound.playClick();
       this.setGameState(STATE.DECORATING);
     };
 
-    // Stage 2: Painting & Decorating
-    const paletteRow = document.getElementById('palette-row');
-    this.paletteColors.forEach((color, i) => {
-      const swatch = document.createElement('div');
-      swatch.className = `color-swatch ${i === 0 ? 'active' : ''}`;
-      swatch.style.backgroundColor = color;
-      swatch.onclick = () => {
-        sound.playClick();
-        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-        swatch.classList.add('active');
-        this.painter.brushColor = color;
-      };
-      paletteRow.appendChild(swatch);
-    });
+    document.getElementById('btn-smooth-clay').onclick = doSmooth;
+    document.getElementById('btn-mini-smooth').onclick = doSmooth;
+    document.getElementById('btn-reset-clay').onclick = doReset;
+    document.getElementById('btn-mini-reset').onclick = doReset;
+    document.getElementById('btn-finish-shape').onclick = doFinishShape;
+    document.getElementById('btn-mini-finish').onclick = doFinishShape;
 
-    document.querySelectorAll('#pattern-tools-row .tool-chip').forEach(chip => {
-      chip.onclick = () => {
-        sound.playClick();
-        document.querySelectorAll('#pattern-tools-row .tool-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        this.painter.selectedTool = chip.dataset.tool;
-      };
-    });
+    // Stage 2: Painting Side Trays & Bottom Dock Minimization
+    const sideLeft = document.getElementById('side-tray-left');
+    const sideRight = document.getElementById('side-tray-right');
+    const decorDock = document.getElementById('dock-decorating');
+
+    document.getElementById('btn-toggle-colors').onclick = (e) => {
+      sound.playClick();
+      sideLeft.classList.toggle('minimized');
+      e.currentTarget.innerText = sideLeft.classList.contains('minimized') ? '▶' : '◀';
+    };
+
+    document.getElementById('btn-toggle-tools').onclick = (e) => {
+      sound.playClick();
+      sideRight.classList.toggle('minimized');
+      e.currentTarget.innerText = sideRight.classList.contains('minimized') ? '◀' : '▶';
+    };
+
+    document.getElementById('btn-toggle-decor-dock').onclick = (e) => {
+      sound.playClick();
+      decorDock.classList.toggle('minimized');
+      e.currentTarget.innerText = decorDock.classList.contains('minimized') ? '▲' : '▼';
+    };
 
     const brushSlider = document.getElementById('brush-size-slider');
     brushSlider.oninput = (e) => {
       this.painter.brushSize = parseInt(e.target.value, 10);
     };
 
-    document.getElementById('btn-undo-paint').onclick = () => {
+    const doUndo = () => {
       sound.playClick();
       this.painter.undo();
     };
-
-    document.getElementById('btn-finish-decorating').onclick = () => {
+    const doFinishDecor = () => {
       sound.playClick();
       this.setGameState(STATE.KILN);
     };
+
+    document.getElementById('btn-paint-undo').onclick = doUndo;
+    document.getElementById('btn-paint-finish').onclick = doFinishDecor;
+    document.getElementById('btn-finish-decorating').onclick = doFinishDecor;
 
     // Stage 3: Kiln
     document.getElementById('btn-start-firing').onclick = () => {
@@ -665,6 +918,11 @@ class PotteryGame {
     };
 
     document.getElementById('btn-sell-auction').onclick = () => {
+      sound.playClick();
+      this.setGameState(STATE.BARGAIN);
+    };
+
+    document.getElementById('btn-sell-from-gallery').onclick = () => {
       sound.playClick();
       this.setGameState(STATE.BARGAIN);
     };
@@ -692,8 +950,6 @@ class PotteryGame {
     });
 
     const dom = this.renderer.domElement;
-
-    // Pointer events (works for touch, pen, mouse uniformly)
     dom.addEventListener('pointerdown', (e) => this.onPointerDown(e), { passive: false });
     window.addEventListener('pointermove', (e) => this.onPointerMove(e), { passive: false });
     window.addEventListener('pointerup', (e) => this.onPointerUp(e), { passive: false });
@@ -735,7 +991,6 @@ class PotteryGame {
     } else if (this.state === STATE.DECORATING) {
       this.handleDecoratingPointer(coords, false);
     } else if (this.state === STATE.DECISION || this.state === STATE.HOME) {
-      // Rotate showcase view
       this.wheelGroup.rotation.y += deltaX * 0.01;
     }
 
@@ -749,7 +1004,6 @@ class PotteryGame {
     }
   }
 
-  // Interactive clay stretching & pinching
   handleShapingPointer(coords, deltaX, deltaY) {
     this.pointer.x = coords.x;
     this.pointer.y = coords.y;
@@ -762,15 +1016,14 @@ class PotteryGame {
       const hitPoint = hit.point;
       const normalizedY = Math.max(0, Math.min(1.0, hitPoint.y / this.potteryModel.height));
 
-      // If near the top rim, allow pulling/pushing height vertically
-      if (normalizedY > 0.85 && Math.abs(deltaY) > Math.abs(deltaX)) {
-        const heightDelta = -deltaY * 0.007; // drag up to stretch taller, down to compress
+      // Drag rim vertically to stretch/compress height
+      if (normalizedY > 0.82 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        const heightDelta = -deltaY * 0.007;
         this.potteryModel.adjustHeight(heightDelta);
         this.updateHeightHUD();
         sound.playClayTouch(0.3);
       } else {
-        // Drag horizontally across clay:
-        // Dragging outward (away from center) widens; inward narrows/pinches
+        // Drag horizontally to pull / pinch clay
         const deltaRadius = deltaX * 0.0075;
         this.potteryModel.deformRadius(normalizedY, deltaRadius);
         this.updateHeightHUD();
@@ -779,7 +1032,6 @@ class PotteryGame {
     }
   }
 
-  // Interactive painting on the pot
   handleDecoratingPointer(coords, isStart) {
     this.pointer.x = coords.x;
     this.pointer.y = coords.y;
@@ -797,7 +1049,6 @@ class PotteryGame {
           this.painter.paintAtUV(uv.x, uv.y, isStart);
           sound.playBrushStroke();
         } else {
-          // Band / Ornamental pattern stamp around circumference
           if (isStart) {
             this.painter.applyCircumferenceBand(uv.y, tool);
             sound.playBrushStroke();
@@ -805,7 +1056,7 @@ class PotteryGame {
         }
       }
     } else {
-      // Swiping outside the pot rotates the wheel for easy painting from all angles
+      // Swiping background rotates the pot
       const deltaX = coords.clientX - this.lastPointerPos.clientX;
       this.wheelGroup.rotation.y += deltaX * 0.008;
     }
@@ -815,7 +1066,6 @@ class PotteryGame {
   animate() {
     requestAnimationFrame(this.animate);
 
-    // Continuous turntable spin
     if (!this.isInteracting || this.state === STATE.SHAPING || this.state === STATE.KILN) {
       this.wheelGroup.rotation.y += this.wheelSpeed;
     }
@@ -824,7 +1074,6 @@ class PotteryGame {
   }
 }
 
-// Boot game when DOM is loaded
 window.addEventListener('DOMContentLoaded', () => {
   new PotteryGame();
 });

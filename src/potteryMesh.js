@@ -5,43 +5,36 @@ export class PotteryModel {
     this.segmentsY = 32;       // vertical resolution
     this.segmentsRadial = 48;  // rotational resolution
     this.minRadius = 0.35;
-    this.maxRadius = 2.4;
+    this.maxRadius = 1.9;      // Kept within mobile frame
     this.minHeight = 1.2;
-    this.maxHeight = 3.8;
+    this.maxHeight = 3.2;      // Kept within mobile frame
 
-    this.height = 2.2;         // current model height units (approx 22cm)
+    this.height = 2.1;         // default height
     this.wallThickness = 0.12;
 
-    // Outer profile radii: array of radii from bottom (index 0) to top (index N-1)
     this.profileRadii = [];
     this.initDefaultProfile();
 
     this.geometry = new THREE.BufferGeometry();
     this.mesh = null;
-    this.innerMesh = null;
   }
 
   initDefaultProfile() {
     this.profileRadii = [];
     for (let i = 0; i < this.segmentsY; i++) {
       const t = i / (this.segmentsY - 1);
-      // Nice gentle initial vase curve
-      const baseR = 0.9;
-      const belly = Math.sin(t * Math.PI) * 0.35;
-      const taper = (1 - t * 0.25);
+      const baseR = 0.82;
+      const belly = Math.sin(t * Math.PI) * 0.32;
+      const taper = (1 - t * 0.22);
       this.profileRadii.push((baseR + belly) * taper);
     }
   }
 
-  // Calculate actual height in cm (1 unit ~ 10 cm, so 2.2 = 22cm)
   getHeightCm() {
     return Math.round(this.height * 10 * 10) / 10;
   }
 
-  // Deform radii based on touch interaction
-  // normalizedY is 0.0 (base) to 1.0 (top)
-  // deltaRadius is positive (expand/pull) or negative (pinch/push in)
-  deformRadius(normalizedY, deltaRadius, radiusRange = 0.22) {
+  deformRadius(normalizedY, deltaRadius, radiusRange = 0.2) {
     const targetIdx = Math.round(normalizedY * (this.segmentsY - 1));
     const sigma = this.segmentsY * radiusRange;
 
@@ -49,7 +42,6 @@ export class PotteryModel {
       const dist = Math.abs(i - targetIdx);
       const weight = Math.exp(-(dist * dist) / (2 * sigma * sigma));
       
-      // Base stays stable on wheel
       let anchorFactor = 1.0;
       if (i === 0) anchorFactor = 0.05;
       else if (i === 1) anchorFactor = 0.3;
@@ -63,13 +55,11 @@ export class PotteryModel {
     this.rebuildGeometry();
   }
 
-  // Stretch / compress height
   adjustHeight(deltaH) {
     this.height = Math.max(this.minHeight, Math.min(this.maxHeight, this.height + deltaH));
     this.rebuildGeometry();
   }
 
-  // Smooth out any sharp bumps or creases
   smoothProfile() {
     const smoothed = [...this.profileRadii];
     for (let i = 1; i < this.segmentsY - 1; i++) {
@@ -80,12 +70,11 @@ export class PotteryModel {
   }
 
   reset() {
-    this.height = 2.2;
+    this.height = 2.1;
     this.initDefaultProfile();
     this.rebuildGeometry();
   }
 
-  // Create or update Lathe geometry
   createMesh(material) {
     this.rebuildGeometry();
     this.mesh = new THREE.Mesh(this.geometry, material);
@@ -95,17 +84,13 @@ export class PotteryModel {
   }
 
   rebuildGeometry() {
-    // Generate 2D cross-section points from base to rim, then down inside
     const points = [];
     const N = this.segmentsY;
 
-    // 1. Bottom center (outside)
+    // Outer surface
     points.push(new THREE.Vector2(0, 0));
-
-    // 2. Base corner
     points.push(new THREE.Vector2(this.profileRadii[0], 0));
 
-    // 3. Outer wall going up
     for (let i = 0; i < N; i++) {
       const t = i / (N - 1);
       const y = t * this.height;
@@ -113,13 +98,13 @@ export class PotteryModel {
       points.push(new THREE.Vector2(r, y));
     }
 
-    // 4. Rim rounded lip
+    // Rim rounded lip
     const rimRadius = this.profileRadii[N - 1];
     const innerRimR = Math.max(0.12, rimRadius - this.wallThickness);
     points.push(new THREE.Vector2((rimRadius + innerRimR) / 2, this.height + 0.03));
     points.push(new THREE.Vector2(innerRimR, this.height));
 
-    // 5. Inner wall going down
+    // Inner cavity
     for (let i = N - 1; i >= 0; i--) {
       const t = i / (N - 1);
       const y = Math.max(this.wallThickness, t * this.height);
@@ -128,15 +113,12 @@ export class PotteryModel {
       points.push(new THREE.Vector2(innerR, y));
     }
 
-    // 6. Inner bottom center
     points.push(new THREE.Vector2(0, this.wallThickness));
 
-    // Dispose old geometry
     if (this.geometry) {
       this.geometry.dispose();
     }
 
-    // Generate Lathe
     this.geometry = new THREE.LatheGeometry(points, this.segmentsRadial);
     this.geometry.computeVertexNormals();
 
@@ -145,14 +127,9 @@ export class PotteryModel {
     }
   }
 
-  // Analyze the pot for appraisal:
-  // - Height (major factor requested by user)
-  // - Curvature complexity (shape aesthetics)
-  // - Slenderness / elegance
   evaluatePotStats() {
     const heightCm = this.getHeightCm();
     
-    // Average radius & variance
     let sumR = 0;
     this.profileRadii.forEach(r => sumR += r);
     const avgR = sumR / this.profileRadii.length;
@@ -163,7 +140,6 @@ export class PotteryModel {
     }
     const stdDev = Math.sqrt(variance / this.profileRadii.length);
 
-    // Number of inflection points (curves/waists)
     let turns = 0;
     for (let i = 1; i < this.profileRadii.length - 1; i++) {
       const d1 = this.profileRadii[i] - this.profileRadii[i - 1];
@@ -171,18 +147,16 @@ export class PotteryModel {
       if (d1 * d2 < 0) turns++;
     }
 
-    // Base value influenced strongly by height:
-    // e.g. 15cm -> ~45 coins, 30cm -> ~110 coins, 45cm -> ~185 coins
-    const heightBonus = Math.round(Math.pow(heightCm, 1.42) * 0.95);
+    const heightBonus = Math.round(Math.pow(heightCm, 1.38) * 0.9);
     const shapeBonus = Math.round(stdDev * 35 + turns * 10);
     const basePrice = Math.max(30, heightBonus + shapeBonus);
 
-    let styleName = "Rustic Clay Pot";
-    if (heightCm > 32 && turns >= 2) styleName = "Graceful Amphora";
-    else if (heightCm > 30) styleName = "Tall Imperial Vase";
-    else if (stdDev > 0.4) styleName = "Hourglass Goblet";
-    else if (heightCm < 18 && avgR > 1.3) styleName = "Ceramic Basin";
-    else if (heightCm < 20) styleName = "Tea Master's Bowl";
+    let styleName = "Rustic Ceramic Pot";
+    if (heightCm > 28 && turns >= 2) styleName = "Graceful Amphora";
+    else if (heightCm > 26) styleName = "Tall Imperial Vase";
+    else if (stdDev > 0.35) styleName = "Hourglass Goblet";
+    else if (heightCm < 16 && avgR > 1.2) styleName = "Ceramic Basin";
+    else if (heightCm < 18) styleName = "Zen Tea Master's Bowl";
     else if (turns >= 2) styleName = "Serpentine Urn";
 
     return {

@@ -14,23 +14,59 @@ export class PotteryPainter {
     this.texture.wrapT = THREE.ClampToEdgeWrapping;
 
     // Painting state
-    this.brushColor = '#2b4c7e'; // Cobalt blue
+    this.brushColor = '#2b4c7e'; // Cobalt blue (Free)
     this.brushSize = 18;
-    this.selectedTool = 'brush'; // 'brush', 'band', 'pattern_greek', 'pattern_tribal', 'pattern_floral', 'pattern_gold'
-    this.glazeTone = '#d49b6a';  // Raw terracotta clay
+    this.selectedTool = 'brush'; // 'brush' (Free)
+    this.glazeTone = '#d49b6a';
 
     this.history = [];
     this.maxHistory = 10;
     this.paintedStrokesCount = 0;
 
+    // Item Store catalog with coin prices
+    this.catalog = {
+      colors: [
+        { id: 'col_cobalt', color: '#2b4c7e', name: 'Cobalt Blue', price: 0 },
+        { id: 'col_clay', color: '#c27c3f', name: 'Raw Terracotta', price: 0 },
+        { id: 'col_crimson', color: '#a83232', name: 'Crimson Clay', price: 20 },
+        { id: 'col_jade', color: '#1b6b50', name: 'Jade Emerald', price: 25 },
+        { id: 'col_amethyst', color: '#8f53a1', name: 'Royal Amethyst', price: 30 },
+        { id: 'col_gold', color: '#e5a93c', name: 'Imperial Gold', price: 40 },
+        { id: 'col_obsidian', color: '#2c2d30', name: 'Obsidian Black', price: 15 },
+        { id: 'col_ivory', color: '#f4f1ea', name: 'Ivory Porcelain', price: 25 }
+      ],
+      patterns: [
+        { id: 'brush', name: '🖌️ Freehand', price: 0 },
+        { id: 'band', name: '🎗️ Glaze Band', price: 0 },
+        { id: 'pattern_tribal', name: '🔶 Tribal', price: 25 },
+        { id: 'pattern_greek', name: '🏛️ Greek Key', price: 35 },
+        { id: 'pattern_floral', name: '🌸 Floral Vine', price: 45 },
+        { id: 'pattern_gold', name: '👑 Royal Gold', price: 60 }
+      ]
+    };
+
+    // Load unlocked items from localStorage
+    this.unlockedItems = new Set(
+      JSON.parse(localStorage.getItem('pottery_unlocked_items') || '["col_cobalt", "col_clay", "brush", "band"]')
+    );
+
     this.initBaseClay();
+  }
+
+  isUnlocked(id) {
+    return this.unlockedItems.has(id);
+  }
+
+  unlockItem(id) {
+    this.unlockedItems.add(id);
+    localStorage.setItem('pottery_unlocked_items', JSON.stringify([...this.unlockedItems]));
   }
 
   initBaseClay(color = '#c98a58') {
     this.glazeTone = color;
     const ctx = this.ctx;
 
-    // Rich terracotta gradient with subtle clay throwing grain
+    // Terracotta gradient with subtle clay grain
     const grad = ctx.createLinearGradient(0, 0, 0, this.height);
     grad.addColorStop(0, '#be7b4a');
     grad.addColorStop(0.5, color);
@@ -38,7 +74,7 @@ export class PotteryPainter {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Subtle horizontal throwing rings
+    // Subtle horizontal throwing ridges
     ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
     for (let y = 0; y < this.height; y += 4) {
       if (Math.sin(y * 0.15) > 0.4) {
@@ -53,8 +89,23 @@ export class PotteryPainter {
     }
 
     this.paintedStrokesCount = 0;
+    this.history = [];
     this.saveState();
     this.texture.needsUpdate = true;
+  }
+
+  // Restore exact painted texture from saved DataURL (for inventory pots!)
+  loadFromDataURL(dataUrl, callback) {
+    const img = new Image();
+    img.onload = () => {
+      this.ctx.clearRect(0, 0, this.width, this.height);
+      this.ctx.drawImage(img, 0, 0, this.width, this.height);
+      this.history = [];
+      this.saveState();
+      this.texture.needsUpdate = true;
+      if (callback) callback();
+    };
+    img.src = dataUrl;
   }
 
   saveState() {
@@ -66,7 +117,7 @@ export class PotteryPainter {
 
   undo() {
     if (this.history.length > 1) {
-      this.history.pop(); // Remove current
+      this.history.pop();
       const prev = this.history[this.history.length - 1];
       this.ctx.putImageData(prev, 0, 0);
       this.texture.needsUpdate = true;
@@ -75,10 +126,9 @@ export class PotteryPainter {
     return false;
   }
 
-  // Draw freehand dot or line segment on UV
   paintAtUV(u, v, isStart = false) {
     const x = Math.floor(u * this.width);
-    const y = Math.floor((1 - v) * this.height); // UV v is inverted relative to canvas y
+    const y = Math.floor((1 - v) * this.height);
 
     this.ctx.save();
     this.ctx.fillStyle = this.brushColor;
@@ -97,11 +147,6 @@ export class PotteryPainter {
       this.ctx.moveTo(this.lastPoint.x, this.lastPoint.y);
       this.ctx.lineTo(x, y);
       this.ctx.stroke();
-
-      // Wrap around seam if near boundary
-      if (Math.abs(x - this.lastPoint.x) > this.width * 0.5) {
-        // Cross boundary
-      }
     }
 
     this.ctx.restore();
@@ -114,7 +159,6 @@ export class PotteryPainter {
     this.lastPoint = null;
   }
 
-  // Apply a full horizontal decorative band at UV v (height)
   applyCircumferenceBand(v, patternType = 'band') {
     this.saveState();
     const yCenter = Math.floor((1 - v) * this.height);
@@ -123,24 +167,18 @@ export class PotteryPainter {
 
     ctx.save();
     if (patternType === 'band') {
-      // Solid colored glaze band with gold borders
       ctx.fillStyle = this.brushColor;
       ctx.fillRect(0, yCenter - bandHeight / 2, this.width, bandHeight);
-      
-      ctx.fillStyle = '#f0c05a'; // gold highlight lines
+      ctx.fillStyle = '#f0c05a';
       ctx.fillRect(0, yCenter - bandHeight / 2 - 2, this.width, 3);
       ctx.fillRect(0, yCenter + bandHeight / 2 - 1, this.width, 3);
     } else if (patternType === 'pattern_greek') {
-      // Greek Key (Meander)
       this.drawGreekKeyBand(yCenter, bandHeight);
     } else if (patternType === 'pattern_tribal') {
-      // Tribal geometric diamonds
       this.drawTribalBand(yCenter, bandHeight);
     } else if (patternType === 'pattern_floral') {
-      // Floral / leaf vine
       this.drawFloralBand(yCenter, bandHeight);
     } else if (patternType === 'pattern_gold') {
-      // Royal metallic gold embossed band
       this.drawGoldEmbossedBand(yCenter, bandHeight);
     }
 
@@ -154,11 +192,9 @@ export class PotteryPainter {
     const h = bandHeight;
     const yTop = yCenter - h / 2;
 
-    // Dark backing
     ctx.fillStyle = this.brushColor;
     ctx.fillRect(0, yTop, this.width, h);
 
-    // Gold/ivory meander lines
     ctx.strokeStyle = '#f8e29a';
     ctx.lineWidth = Math.max(3, h * 0.12);
     ctx.lineCap = 'square';
@@ -168,11 +204,7 @@ export class PotteryPainter {
 
     for (let i = 0; i < count; i++) {
       const x0 = i * cellW;
-      const x1 = x0 + cellW;
-      const midY = yTop + h * 0.5;
-
       ctx.beginPath();
-      // Meander spiral
       ctx.moveTo(x0, yTop + h * 0.15);
       ctx.lineTo(x0 + cellW * 0.85, yTop + h * 0.15);
       ctx.lineTo(x0 + cellW * 0.85, yTop + h * 0.85);
@@ -198,7 +230,6 @@ export class PotteryPainter {
     ctx.fillStyle = '#ffdf80';
     for (let i = 0; i < count; i++) {
       const x = i * step;
-      // Diamond
       ctx.beginPath();
       ctx.moveTo(x + step * 0.5, yTop + h * 0.15);
       ctx.lineTo(x + step * 0.9, yCenter);
@@ -207,7 +238,6 @@ export class PotteryPainter {
       ctx.closePath();
       ctx.fill();
 
-      // Inner dot
       ctx.fillStyle = '#b32424';
       ctx.beginPath();
       ctx.arc(x + step * 0.5, yCenter, h * 0.12, 0, Math.PI * 2);
@@ -221,10 +251,9 @@ export class PotteryPainter {
     const h = bandHeight;
     const yTop = yCenter - h / 2;
 
-    ctx.fillStyle = 'rgba(25, 45, 30, 0.85)';
+    ctx.fillStyle = 'rgba(25, 45, 30, 0.88)';
     ctx.fillRect(0, yTop, this.width, h);
 
-    // Sine wave vine
     ctx.strokeStyle = '#62ad5b';
     ctx.lineWidth = Math.max(3, h * 0.1);
     ctx.beginPath();
@@ -235,11 +264,9 @@ export class PotteryPainter {
     }
     ctx.stroke();
 
-    // Little flowers and leaves
     const step = 45;
     for (let x = 15; x < this.width; x += step) {
       const y = yCenter + Math.sin(x * 0.05) * (h * 0.28);
-      // Lotus petals
       ctx.fillStyle = '#ff7597';
       ctx.beginPath();
       ctx.arc(x, y - 6, 6, 0, Math.PI * 2);
@@ -247,7 +274,6 @@ export class PotteryPainter {
       ctx.arc(x + 5, y - 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Golden center
       ctx.fillStyle = '#ffd13b';
       ctx.beginPath();
       ctx.arc(x, y - 3, 3, 0, Math.PI * 2);
@@ -269,7 +295,6 @@ export class PotteryPainter {
     ctx.fillStyle = goldGrad;
     ctx.fillRect(0, yTop, this.width, h);
 
-    // Beaded edging
     ctx.fillStyle = '#fff6d6';
     for (let x = 6; x < this.width; x += 14) {
       ctx.beginPath();
@@ -280,9 +305,7 @@ export class PotteryPainter {
   }
 
   getDecorationBonus() {
-    // Score based on number of strokes and pattern richness
-    const score = Math.min(100, Math.round(this.paintedStrokesCount * 1.8));
-    return score;
+    return Math.min(100, Math.round(this.paintedStrokesCount * 1.8));
   }
 
   toDataURL() {
