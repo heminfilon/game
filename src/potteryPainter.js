@@ -38,6 +38,7 @@ export class PotteryPainter {
       patterns: [
         { id: 'brush', name: '🖌️ Freehand', price: 0 },
         { id: 'band', name: '🎗️ Glaze Band', price: 0 },
+        { id: 'pattern_warli', name: '🌾 Warli Folk', price: 20 },
         { id: 'pattern_tribal', name: '🔶 Tribal', price: 25 },
         { id: 'pattern_greek', name: '🏛️ Greek Key', price: 35 },
         { id: 'pattern_floral', name: '🌸 Floral Vine', price: 45 },
@@ -172,6 +173,8 @@ export class PotteryPainter {
       ctx.fillStyle = '#f0c05a';
       ctx.fillRect(0, yCenter - bandHeight / 2 - 2, this.width, 3);
       ctx.fillRect(0, yCenter + bandHeight / 2 - 1, this.width, 3);
+    } else if (patternType === 'pattern_warli') {
+      this.drawWarliBand(yCenter, bandHeight);
     } else if (patternType === 'pattern_greek') {
       this.drawGreekKeyBand(yCenter, bandHeight);
     } else if (patternType === 'pattern_tribal') {
@@ -185,6 +188,73 @@ export class PotteryPainter {
     ctx.restore();
     this.paintedStrokesCount += 12;
     this.texture.needsUpdate = true;
+  }
+
+  drawWarliBand(yCenter, bandHeight) {
+    const ctx = this.ctx;
+    const h = Math.max(36, bandHeight * 1.3);
+    const yTop = yCenter - h / 2;
+
+    // Traditional Burnt Ochre/Terracotta backing strip
+    ctx.fillStyle = '#8f3c1b';
+    ctx.fillRect(0, yTop, this.width, h);
+
+    // Rice-water white lines & sawtooth border
+    ctx.strokeStyle = '#fffdfa';
+    ctx.fillStyle = '#fffdfa';
+    ctx.lineWidth = 1.8;
+
+    ctx.beginPath();
+    ctx.moveTo(0, yTop + 3);
+    ctx.lineTo(this.width, yTop + 3);
+    ctx.moveTo(0, yTop + h - 3);
+    ctx.lineTo(this.width, yTop + h - 3);
+    ctx.stroke();
+
+    // Repeating Warli Dancers holding hands
+    const step = 28;
+    const count = Math.ceil(this.width / step);
+
+    for (let i = 0; i < count; i++) {
+      const x = i * step + step * 0.5;
+      const midY = yCenter;
+
+      // Circular head
+      ctx.beginPath();
+      ctx.arc(x, midY - h * 0.28, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Body: Two triangles joined at vertices (Torso & Hips)
+      ctx.beginPath();
+      ctx.moveTo(x - 5, midY - h * 0.2);
+      ctx.lineTo(x + 5, midY - h * 0.2);
+      ctx.lineTo(x, midY - h * 0.05);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(x - 5, midY + h * 0.1);
+      ctx.lineTo(x + 5, midY + h * 0.1);
+      ctx.lineTo(x, midY - h * 0.05);
+      ctx.closePath();
+      ctx.fill();
+
+      // Dancing Legs
+      ctx.beginPath();
+      ctx.moveTo(x - 3, midY + h * 0.1);
+      ctx.lineTo(x - 6, midY + h * 0.32);
+      ctx.moveTo(x + 3, midY + h * 0.1);
+      ctx.lineTo(x + 6, midY + h * 0.32);
+      ctx.stroke();
+
+      // Arched interlocking arms holding neighbor's hand
+      ctx.beginPath();
+      ctx.moveTo(x, midY - h * 0.08);
+      ctx.quadraticCurveTo(x - step * 0.3, midY - h * 0.02, x - step * 0.5, midY + h * 0.04);
+      ctx.moveTo(x, midY - h * 0.08);
+      ctx.quadraticCurveTo(x + step * 0.3, midY - h * 0.02, x + step * 0.5, midY + h * 0.04);
+      ctx.stroke();
+    }
   }
 
   drawGreekKeyBand(yCenter, bandHeight) {

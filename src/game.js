@@ -376,6 +376,7 @@ class PotteryGame {
     const toolIcons = {
       'brush': '🖌️',
       'band': '🎗️',
+      'pattern_warli': '🌾',
       'pattern_tribal': '🔶',
       'pattern_greek': '🏛️',
       'pattern_floral': '🌸',
