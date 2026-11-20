@@ -965,21 +965,6 @@ class PotteryGame {
     };
 
     // Stage 2: Side Painting Trays
-    const sideLeft = document.getElementById('side-tray-left');
-    const sideRight = document.getElementById('side-tray-right');
-
-    document.getElementById('btn-toggle-colors').onclick = (e) => {
-      sound.playClick();
-      sideLeft.classList.toggle('minimized');
-      e.currentTarget.innerText = sideLeft.classList.contains('minimized') ? '▶' : '◀';
-    };
-
-    document.getElementById('btn-toggle-tools').onclick = (e) => {
-      sound.playClick();
-      sideRight.classList.toggle('minimized');
-      e.currentTarget.innerText = sideRight.classList.contains('minimized') ? '◀' : '▶';
-    };
-
     document.getElementById('btn-paint-undo').onclick = () => {
       sound.playClick();
       this.painter.undo();

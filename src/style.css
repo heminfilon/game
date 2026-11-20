@@ -196,14 +196,6 @@ html, body {
   align-items: center;
 }
 
-.side-action-column.left.minimized {
-  transform: translateY(-50%) translateX(-90px);
-}
-
-.side-action-column.right.minimized {
-  transform: translateY(-50%) translateX(90px);
-}
-
 /* Side Circle Buttons */
 .side-circle-btn {
   width: 56px;
@@ -374,23 +366,6 @@ html, body {
   background: rgba(201, 138, 88, 0.4);
   border-color: var(--primary);
   transform: scale(1.05);
-}
-
-.side-toggle-pill {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(35, 37, 46, 0.95);
-  border: 1px solid var(--surface-border);
-  color: var(--gold);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-  margin-bottom: 4px;
 }
 
 /* General Buttons */
