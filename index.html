@@ -19,7 +19,7 @@
 
     <!-- Shatter / Crash FX Overlay -->
     <div id="shatter-fx" class="shatter-overlay">
-      <div style="text-align: center; color: #fff; font-size: 28px; font-weight: 800; text-shadow: 0 4px 12px rgba(0,0,0,0.8);">
+      <div style="text-align: center; color: #fff; font-size: 26px; font-weight: 800; text-shadow: 0 4px 12px rgba(0,0,0,0.8);">
         💥 POT SHATTERED!
       </div>
     </div>
@@ -32,7 +32,6 @@
       <!-- Top Navigation & Status Bar -->
       <div class="top-bar">
         <div class="top-left-group">
-          <!-- Profile Button -->
           <button class="icon-btn" id="btn-open-profile" title="Player Profile">👤</button>
           <div class="coin-badge" id="coin-badge" title="In-game Coins">
             <span class="coin-icon">🪙</span>
@@ -54,126 +53,120 @@
         <span class="val" id="height-val">21.0 cm</span>
       </div>
 
-      <!-- STAGE 1: SHAPING MINIMIZABLE BOTTOM DOCK -->
-      <div class="dock-wrapper" id="dock-shaping" style="display: none;">
-        <!-- Compact Circle Action Bar (Always visible or toggled) -->
-        <div class="compact-circle-bar">
-          <button class="circle-action-btn" id="btn-mini-smooth" title="Smooth Clay">✨</button>
-          <button class="circle-action-btn" id="btn-mini-reset" title="Reset Shape">↺</button>
-          <button class="circle-action-btn primary" id="btn-mini-finish" title="Next: Decorate">🎨</button>
-          <button class="dock-toggle-btn" id="btn-toggle-shaping-dock" title="Expand / Minimize Details">▼</button>
-        </div>
-        <!-- Expandable Detail Card -->
-        <div class="collapsible-card" id="card-shaping-detail">
-          <p style="font-size: 13px; color: var(--text-sub); text-align: center; line-height: 1.4;">
-            🖐️ Drag horizontally to <b>pull / pinch</b> clay. Drag rim up/down to <b>stretch height</b>.
-          </p>
-          <div style="display: flex; gap: 8px; margin-top: 10px;">
-            <button class="btn btn-secondary" id="btn-smooth-clay" style="flex: 1; padding: 10px;">✨ Smooth</button>
-            <button class="btn btn-secondary" id="btn-reset-clay" style="flex: 1; padding: 10px;">↺ Reset</button>
-            <button class="btn btn-primary" id="btn-finish-shape" style="flex: 1.5; padding: 10px;">🎨 Next: Paint</button>
-          </div>
-        </div>
+      <!-- ============================================== -->
+      <!-- STAGE 1: SHAPING - SIDE RIGHT FLOATING COLUMN -->
+      <!-- Zero bottom buttons! Placed cleanly on the right -->
+      <!-- ============================================== -->
+      <div class="side-action-column right" id="panel-shaping" style="display: none;">
+        <button class="side-circle-btn primary" id="btn-mini-finish" title="Done: Next to Paint">
+          <span class="btn-icon">🎨</span>
+          <span class="btn-label">Done</span>
+        </button>
+        <button class="side-circle-btn" id="btn-mini-smooth" title="Smooth Imperfections">
+          <span class="btn-icon">✨</span>
+          <span class="btn-label">Smooth</span>
+        </button>
+        <button class="side-circle-btn" id="btn-mini-reset" title="Reset Shape">
+          <span class="btn-icon">↺</span>
+          <span class="btn-label">Reset</span>
+        </button>
       </div>
 
-      <!-- STAGE 2: PAINTING & DECORATING SIDE TRAYS & BOTTOM DOCK -->
-      <!-- Left Side Tray: Colors Palette (Slide-out & minimizable) -->
-      <div class="side-tray-left" id="side-tray-left" style="display: none;">
-        <div class="side-toggle-pill left" id="btn-toggle-colors" title="Toggle Colors">◀</div>
+      <!-- ============================================== -->
+      <!-- STAGE 2: PAINTING & DECORATING - SIDE TRAYS -->
+      <!-- Left side: Colors | Right side: Tools & Fire -->
+      <!-- Zero bottom buttons! -->
+      <!-- ============================================== -->
+      <!-- Left Tray: Colors Palette -->
+      <div class="side-action-column left" id="side-tray-left" style="display: none;">
+        <div class="side-toggle-pill" id="btn-toggle-colors" title="Toggle Colors">◀</div>
         <div class="palette-column" id="palette-column">
-          <!-- Populated by JS with lock icons for purchasable colors -->
+          <!-- Populated by JS -->
         </div>
       </div>
 
-      <!-- Right Side Tray: Pattern Tools & Brush (Slide-out & minimizable) -->
-      <div class="side-tray-right" id="side-tray-right" style="display: none;">
-        <div class="side-toggle-pill right" id="btn-toggle-tools" title="Toggle Tools">▶</div>
+      <!-- Right Tray: Pattern Tools + Size Slider + Done Fire Button -->
+      <div class="side-action-column right" id="side-tray-right" style="display: none;">
+        <button class="side-circle-btn primary" id="btn-paint-finish" title="Done: Fire in Kiln">
+          <span class="btn-icon">🔥</span>
+          <span class="btn-label">Bake</span>
+        </button>
+        <button class="side-circle-btn" id="btn-paint-undo" title="Undo Stroke">
+          <span class="btn-icon">↩</span>
+          <span class="btn-label">Undo</span>
+        </button>
+        <div class="side-toggle-pill" id="btn-toggle-tools" title="Toggle Tools">▶</div>
         <div class="pattern-column" id="pattern-column">
-          <!-- Populated by JS with lock icons for purchasable patterns -->
+          <!-- Populated by JS -->
         </div>
       </div>
 
-      <!-- Bottom Dock for Painting -->
-      <div class="dock-wrapper" id="dock-decorating" style="display: none;">
-        <div class="compact-circle-bar">
-          <button class="circle-action-btn" id="btn-paint-undo" title="Undo Stroke">↩</button>
-          <button class="circle-action-btn primary" id="btn-paint-finish" title="Fire in Kiln">🔥</button>
-          <button class="dock-toggle-btn" id="btn-toggle-decor-dock" title="Toggle Brush Slider">▼</button>
-        </div>
-        <div class="collapsible-card" id="card-decor-detail" style="padding: 10px 14px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-            <span style="font-size: 12px; color: var(--text-sub);">Brush Size</span>
-            <input type="range" id="brush-size-slider" min="8" max="40" value="18" style="flex: 1; accent-color: var(--primary);" />
-            <button class="btn btn-primary" id="btn-finish-decorating" style="padding: 8px 14px; font-size: 13px;">🔥 Fire in Kiln</button>
+      <!-- ============================================== -->
+      <!-- STAGE 3: KILN - SIDE RIGHT FLOATING CARD -->
+      <!-- ============================================== -->
+      <div class="side-floating-card right" id="panel-kiln" style="display: none;">
+        <div class="temp-gauge-container">
+          <span style="font-size: 11px; color: var(--text-sub);">KILN TEMPERATURE</span>
+          <div class="temp-text" id="kiln-temp-text">25 °C</div>
+          <div class="temp-gauge-bar">
+            <div class="temp-gauge-fill" id="kiln-temp-fill"></div>
           </div>
         </div>
+        <button class="btn btn-primary" id="btn-start-firing" style="margin-top: 10px; width: 100%;">
+          🔥 Ignite Kiln
+        </button>
+        <button class="btn btn-gold" id="btn-inspect-pot" style="margin-top: 10px; width: 100%; display: none;">
+          ✨ Inspect Finished
+        </button>
       </div>
 
-      <!-- STAGE 3: KILN HEATING BOTTOM DOCK -->
-      <div class="dock-wrapper" id="dock-kiln" style="display: none;">
-        <div class="collapsible-card">
-          <div class="temp-gauge-container">
-            <span style="font-size: 11px; color: var(--text-sub);">KILN TEMPERATURE</span>
-            <div class="temp-text" id="kiln-temp-text">25 °C</div>
-            <div class="temp-gauge-bar">
-              <div class="temp-gauge-fill" id="kiln-temp-fill"></div>
-            </div>
+      <!-- ============================================== -->
+      <!-- STAGE 4: DECISION (KEEP OR SELL) - SIDE RIGHT CARD -->
+      <!-- ============================================== -->
+      <div class="side-floating-card right" id="panel-decision" style="display: none;">
+        <div style="text-align: center;">
+          <h3 id="appraisal-style-name" style="font-size: 16px; color: #fff;">Imperial Ceramic Vase</h3>
+          <span style="font-size: 11px; color: var(--text-sub);">High Gloss Porcelain</span>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="k">Height</span>
+            <span class="v" id="appraisal-height">28.0 cm</span>
           </div>
-          <button class="btn btn-primary" id="btn-start-firing" style="margin-top: 12px; width: 100%;">
-            🔥 Ignite Kiln & Bake Pottery
+          <div class="stat-item">
+            <span class="k">Decor Bonus</span>
+            <span class="v" id="appraisal-decor">+45 🪙</span>
+          </div>
+        </div>
+
+        <div class="predicted-price-box">
+          <div>
+            <span style="font-size: 10px; text-transform: uppercase; color: var(--text-sub); display: block;">Valuation</span>
+            <span style="font-size: 17px; font-weight: 800; color: var(--gold);" id="predicted-price-text">125 Coins</span>
+          </div>
+          <span style="font-size: 20px;">🏺</span>
+        </div>
+
+        <div class="decision-actions" id="decision-normal-actions">
+          <button class="btn btn-secondary" id="btn-keep-pot" title="Store in inventory for 10 coins" style="padding: 10px; font-size: 13px;">
+            📦 Keep (10 🪙)
           </button>
-          <button class="btn btn-gold" id="btn-inspect-pot" style="margin-top: 12px; width: 100%; display: none;">
-            ✨ Inspect Finished Pottery
+          <button class="btn btn-gold" id="btn-sell-auction" title="Sell with interactive bargaining" style="padding: 10px; font-size: 13px;">
+            💰 Sell
+          </button>
+        </div>
+
+        <div id="decision-inventory-actions" style="display: none; margin-top: 8px;">
+          <button class="btn btn-gold" id="btn-sell-from-gallery" style="width: 100%; padding: 12px; font-size: 14px;">
+            💰 Sell Masterpiece
           </button>
         </div>
       </div>
 
-      <!-- STAGE 4: DECISION (KEEP OR SELL) -->
-      <div class="dock-wrapper" id="dock-decision" style="display: none;">
-        <div class="collapsible-card">
-          <div style="text-align: center;">
-            <h3 id="appraisal-style-name" style="font-size: 18px; color: #fff;">Imperial Ceramic Vase</h3>
-            <span style="font-size: 12px; color: var(--text-sub);">Firing Complete • High Gloss Porcelain</span>
-          </div>
-
-          <div class="stats-grid">
-            <div class="stat-item">
-              <span class="k">Measured Height</span>
-              <span class="v" id="appraisal-height">28.0 cm</span>
-            </div>
-            <div class="stat-item">
-              <span class="k">Decoration Bonus</span>
-              <span class="v" id="appraisal-decor">+45 Coins</span>
-            </div>
-          </div>
-
-          <div class="predicted-price-box">
-            <div>
-              <span style="font-size: 10px; text-transform: uppercase; color: var(--text-sub); display: block;">Predicted Valuation</span>
-              <span style="font-size: 19px; font-weight: 800; color: var(--gold);" id="predicted-price-text">125 Coins</span>
-            </div>
-            <span style="font-size: 24px;">🏺</span>
-          </div>
-
-          <div class="decision-actions" id="decision-normal-actions">
-            <button class="btn btn-secondary" id="btn-keep-pot" title="Store in inventory for 10 coins">
-              📦 Keep (10 🪙)
-            </button>
-            <button class="btn btn-gold" id="btn-sell-auction" title="Sell with interactive bargaining">
-              💰 Sell Pottery
-            </button>
-          </div>
-
-          <!-- Actions when inspecting a pot from Gallery -->
-          <div id="decision-inventory-actions" style="display: none; margin-top: 8px;">
-            <button class="btn btn-gold" id="btn-sell-from-gallery" style="width: 100%; padding: 14px;">
-              💰 Sell This Masterpiece (Bargain)
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- STAGE 5: INTERACTIVE BARGAIN & SELL MODAL -->
+      <!-- ============================================== -->
+      <!-- STAGE 5: BARGAIN & BIDDING (At Bottom as approved) -->
+      <!-- ============================================== -->
       <div class="bargain-modal interactive" id="panel-bargain" style="display: none;">
         <div class="collapsible-card" style="width: 100%;">
           <div class="dealer-header">
